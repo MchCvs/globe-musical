@@ -3,7 +3,7 @@
 Une mappemonde interactive pour découvrir des radios FM du monde entier, directement dans le navigateur.
 
 **👉 [Ouvrir le site](https://MchCvs.github.io/globe-musical/)**
-*(remplace ce lien par ta véritable adresse, visible dans Settings → Pages une fois le site en ligne)*
+
 
 ## Fonctionnalités
 
