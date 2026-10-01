@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<!--
+    Globe Musical — mappemonde interactive des radios FM du monde
+    Créé par Thierry (La Réunion), avec l'aide de Claude (Anthropic) — septembre 2026
+-->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Globe Musical</title>
+    <script src="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; background: #050510; }
+        html, body { height: 100%; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100%; }
+        /* Le conteneur est positionné par MapLibre via transform : on n'y touche pas */
+        .radio-marker { width: 18px; height: 18px; cursor: pointer; }
+        .radio-marker:hover { z-index: 100; }
+        .radio-dot {
+            background-color: #ff6b81; border: 2px solid #fff; border-radius: 50%;
+            width: 14px; height: 14px; box-shadow: 0 0 10px rgba(255, 107, 129, 0.8);
+            transition: transform 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        .radio-dot::after { content: '📻'; font-size: 8px; color: white; font-weight: bold; }
+        .radio-marker:hover .radio-dot { transform: scale(1.8); }
+        /* Station sans GPS : placée au centre de son pays (position approximative) */
+        .radio-marker.approx .radio-dot { border-style: dashed; opacity: 0.75; }
+        .maplibregl-popup-content {
+            background: #1e1e24; color: #fff; border: 1px solid #444; border-radius: 8px;
+            padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 300px; font-size: 13px;
+        }
+        .maplibregl-popup-tip { border-top-color: #1e1e24; }
+        .radio-name { font-weight: 800; font-size: 16px; color: #ff6b81; display: block; margin-bottom: 5px; text-transform: uppercase; }
+        .radio-info { color: #a4b0be; font-size: 12px; margin-bottom: 3px; display: block; }
+        .radio-tags { color: #747d8c; font-size: 11px; font-style: italic; margin-bottom: 10px; display: block; border-top: 1px solid #333; padding-top: 5px; }
+        .radio-btn {
+            display: block; background: linear-gradient(45deg, #ff6b81, #ff4757); color: white;
+            padding: 8px; text-align: center; text-decoration: none; border-radius: 4px;
+            font-weight: 700; text-transform: uppercase; font-size: 12px; margin-top: 5px;
+        }
+        .ui-panel {
+            position: absolute; top: 20px; left: 20px; background: rgba(30, 30, 36, 0.95); color: #fff;
+            padding: 20px; border-radius: 12px; border: 1px solid #444; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            z-index: 100; width: 380px; max-height: 85vh; display: flex; flex-direction: column;
+        }
+        .ui-panel h2 { margin: 0 0 15px 0; font-size: 18px; color: #ff6b81; text-transform: uppercase; }
+        .search-container { position: relative; margin-bottom: 15px; }
+        .control-label { display: block; font-size: 12px; color: #a4b0be; margin-bottom: 5px; font-weight: 600; }
+        .discover-toggle {
+            display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: 12px;
+            color: #a4b0be; cursor: pointer; line-height: 1.4;
+        }
+        .discover-toggle input { margin-top: 2px; accent-color: #ff6b81; cursor: pointer; }
+        .credit-footer { text-align: center; font-size: 10px; color: #57606f; margin-top: 10px; letter-spacing: 0.3px; }
+        input#genre-input {
+            width: 100%; padding: 12px; background: #2f3542; color: #fff; border: 1px solid #57606f;
+            border-radius: 6px; font-size: 15px; font-family: 'Segoe UI', sans-serif; outline: none; box-sizing: border-box;
+        }
+        input#genre-input:focus { border-color: #ff6b81; }
+        #autocomplete-list {
+            position: absolute; top: 100%; left: 0; right: 0; background: #2f3542; border: 1px solid #57606f;
+            border-top: none; border-radius: 0 0 6px 6px; max-height: 200px; overflow-y: auto;
+            z-index: 1000; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        .autocomplete-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #3d4450; display: flex; justify-content: space-between; }
+        .autocomplete-item:hover { background: #3d4450; }
+        .autocomplete-item span.count { font-size: 11px; color: #a4b0be; background: #1e1e24; padding: 2px 6px; border-radius: 4px; }
+        
+        button#load-btn {
+            width: 100%; padding: 12px; background: linear-gradient(45deg, #ff6b81, #ff4757); color: white;
+            border: none; border-radius: 6px; font-weight: 700; font-size: 14px; cursor: pointer; text-transform: uppercase;
+            margin-top: 5px;
+        }
+        button#load-btn:disabled { background: #57606f; cursor: not-allowed; opacity: 0.7; }
+        
+        button#explore-btn {
+            width: 100%; padding: 8px; background: transparent; border: 1px dashed #57606f;
+            color: #a4b0be; border-radius: 6px; font-size: 12px; cursor: pointer; margin-top: 10px;
+        }
+        button#explore-btn:hover { border-color: #ff6b81; color: #ff6b81; }
+        
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .stat-box { background: #2f3542; padding: 8px; border-radius: 6px; text-align: center; }
+        .stat-val { display: block; font-size: 18px; font-weight: bold; color: #ff6b81; font-family: monospace; }
+        .stat-label { font-size: 10px; color: #a4b0be; text-transform: uppercase; }
+        
+        .log-box {
+            flex-grow: 1; background: #000; color: #0f0; font-family: 'Consolas', monospace;
+            font-size: 11px; padding: 8px; border: 1px solid #333; border-radius: 4px;
+            overflow-y: auto; height: 120px; line-height: 1.4; margin-top: 10px;
+        }
+        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #111; }
+        .log-error { color: #ff4757; font-weight: bold; }
+        .log-success { color: #2ed573; font-weight: bold; }
+        .log-info { color: #00d2d3; }
+        .log-warn { color: #f1c40f; }
+        
+        .progress-bar { width: 100%; background-color: #333; border-radius: 4px; height: 6px; overflow: hidden; margin-top: 10px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #ff6b81, #ff4757); width: 0%; transition: width 0.3s; }
+        
+        /* Indicateur de statut */
+        .status-badge {
+            display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 10px;
+        }
+        .status-ok { background: #2ed573; color: #000; }
+        .status-ko { background: #ff4757; color: #fff; }
+
+        /* Bouton pour réduire/agrandir le panneau (visible uniquement sur petit écran) */
+        #panel-toggle {
+            display: none; margin-left: auto; background: #2f3542; color: #fff; border: 1px solid #57606f;
+            border-radius: 6px; width: 36px; height: 36px; font-size: 16px; cursor: pointer; padding: 0;
+        }
+        .ui-panel.collapsed > *:not(h2) { display: none; }
+        .ui-panel.collapsed h2 { margin-bottom: 0; }
+
+        /* Smartphone : le panneau prend la largeur de l'écran au lieu de 380 px fixes */
+        @media (max-width: 600px) {
+            .ui-panel { top: 10px; left: 10px; right: 10px; width: auto; padding: 12px; max-height: 80vh; max-height: 80dvh; }
+            .ui-panel h2 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; }
+            #panel-toggle { display: inline-block; }
+            input#genre-input { font-size: 16px; } /* évite le zoom automatique à la saisie */
+            .log-box { height: 70px; }
+            .stats-grid { margin-top: 10px; }
+        }
+
+        /* Écran tactile : zones de toucher plus grandes */
+        @media (pointer: coarse) {
+            .radio-marker { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+            .radio-btn { padding: 12px; font-size: 13px; }
+            button#load-btn, button#explore-btn { min-height: 44px; }
+            .autocomplete-item { padding: 14px 10px; }
+        }
+
+        /* Choix du mode de recherche : style / station / pays */
+        .mode-switch { display: flex; gap: 6px; margin-bottom: 12px; }
+        .mode-btn {
+            flex: 1; padding: 9px 0; background: #2f3542; color: #a4b0be; border: 1px solid #57606f;
+            border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; cursor: pointer;
+        }
+        .mode-btn.active { background: #ff6b81; border-color: #ff6b81; color: #fff; }
+    </style>
+</head>
+<body>
+    <noscript><div style="color:#fff;background:#1e1e24;font-family:sans-serif;padding:30px;text-align:center">
+        Cette page a besoin de JavaScript pour fonctionner.<br>
+        Si vous l'avez ouverte depuis un aperçu de pièce jointe (Mail, Messages, Fichiers...), utilisez plutôt « Ouvrir dans Safari/Chrome ».
+    </div></noscript>
+    <div id="map"></div>
+    <div class="ui-panel">
+        <h2>🌍 Globe Musical <span id="connection-status" class="status-badge status-ko" onclick="testConnection()" title="Toucher pour retester la connexion" style="cursor:pointer">TEST...</span><button id="panel-toggle" type="button" aria-label="Réduire ou agrandir le panneau" onclick="togglePanel()">▴</button></h2>
+        <div class="search-container">
+            <div class="mode-switch">
+                <button type="button" class="mode-btn active" data-mode="style" onclick="setSearchMode('style')">Style</button>
+                <button type="button" class="mode-btn" data-mode="name" onclick="setSearchMode('name')">Station</button>
+                <button type="button" class="mode-btn" data-mode="country" onclick="setSearchMode('country')">Pays</button>
+            </div>
+            <label class="control-label" id="search-label">STYLE DE MUSIQUE</label>
+            <input type="text" id="genre-input" value="progressive rock" placeholder="Ex: Jazz, Techno, Salsa...">
+            <div id="autocomplete-list"></div>
+            <label class="discover-toggle">
+                <input type="checkbox" id="discover-mode">
+                🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)
+            </label>
+        </div>
+        <button id="load-btn" onclick="onLoadClick()">CHARGER LES STATIONS</button>
+        <button id="explore-btn" onclick="openPicker()">💡 Voir les genres populaires</button>
+        
+        <div class="stats-grid">
+            <div class="stat-box"><span class="stat-val" id="scanned-val">0</span><span class="stat-label">Trouvées</span></div>
+            <div class="stat-box"><span class="stat-val" id="found-val">0</span><span class="stat-label">Affichées</span></div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        
+        <div class="log-box" id="log-box">
+            <div class="log-entry">> Initialisation du système...</div>
+        </div>
+        <div class="credit-footer">Créé par Thierry · La Réunion 🇷🇪</div>
+    </div>
+
+    <script>
+        // La vue « globe 3D » demande plus au GPU du téléphone que la carte plate classique ;
+        // certains mobiles (Android comme iPhone) l'affichent mal, voire pas du tout.
+        // On démarre donc toujours en carte plate, et le bouton 🌐 permet de passer en globe 3D à la demande.
+        let map = null, mapAvailable = true;
+        let basemapTimeoutId = null;
+        class ProjectionToggleControl {
+            onAdd(m) {
+                this._map = m;
+                this._container = document.createElement('div');
+                this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+                this._btn = document.createElement('button');
+                this._btn.type = 'button';
+                this._btn.title = 'Basculer entre la carte plate et la vue globe 3D';
+                this._btn.style.fontSize = '16px';
+                this._btn.textContent = '🌐';
+                this._btn.onclick = () => {
+                    const goingGlobe = this._btn.textContent === '🌐';
+                    try {
+                        m.setProjection({ type: goingGlobe ? 'globe' : 'mercator' });
+                        this._btn.textContent = goingGlobe ? '🗺️' : '🌐';
+                        log(goingGlobe ? "Vue globe 3D activée." : "Retour à la carte plate.", "info");
+                    } catch (e) {
+                        log("Vue globe 3D indisponible sur cet appareil.", "warn");
+                    }
+                };
+                this._container.appendChild(this._btn);
+                return this._container;
+            }
+            onRemove() { this._container.remove(); }
+        }
+
+        // Fond de carte de secours : simples tuiles image (OpenStreetMap), sans sprite ni police à charger,
+        // et sans clé d'API. Beaucoup plus léger que le style détaillé, utile si celui-ci échoue.
+        const FALLBACK_STYLE = {
+            version: 8,
+            sources: {
+                'raster-tiles': {
+                    type: 'raster',
+                    tiles: [
+                        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: '© OpenStreetMap contributors'
+                }
+            },
+            layers: [{ id: 'raster-tiles', type: 'raster', source: 'raster-tiles' }]
+        };
+        let usedFallbackBasemap = false;
+        let mapLoadedOnce = false;
+        function switchToFallbackBasemap(reason) {
+            if (usedFallbackBasemap || !mapAvailable) return;
+            usedFallbackBasemap = true;
+            clearTimeout(basemapTimeoutId);
+            log("Fond de carte détaillé indisponible" + (reason ? ` (${reason})` : "") + ", passage à un fond simplifié.", "warn");
+            try { map.setStyle(FALLBACK_STYLE); } catch (e) { log("Fond de secours aussi indisponible : " + e.message, "error"); }
+        }
+
+        try {
+            map = new maplibregl.Map({
+                container: 'map',
+                // OpenFreeMap : styles MapLibre gratuits et sans clé d'API (contrairement à CARTO, qui en exige
+                // désormais une, y compris sur ses anciennes tuiles gratuites — d'où l'ancien message d'erreur
+                // « API KEY REQUIRED » qui pouvait s'afficher ici).
+                style: 'https://tiles.openfreemap.org/styles/dark',
+                center: [0, 20], zoom: 1.5, antialias: true
+            });
+        } catch (e) {
+            mapAvailable = false;
+            document.getElementById('map').innerHTML =
+                '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;font-family:sans-serif">' +
+                'Carte indisponible sur cet appareil (WebGL non supporté par ce navigateur).</div>';
+        }
+
+        if (mapAvailable) {
+        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }),
+            window.matchMedia('(max-width: 600px)').matches ? 'bottom-right' : 'top-right');
+        map.addControl(new ProjectionToggleControl(), 'bottom-left');
+
+        // Recalcule la taille de la carte à chaque changement de viewport : barre d'adresse mobile qui
+        // se réduit, rotation de l'écran, clavier qui s'ouvre... window.resize seul ne suffit pas toujours
+        // sur mobile, d'où l'ajout de visualViewport (plus fiable) et orientationchange.
+        const requestMapResize = () => { if (mapAvailable) setTimeout(() => map.resize(), 50); };
+        window.addEventListener('resize', requestMapResize);
+        window.addEventListener('orientationchange', requestMapResize);
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', requestMapResize);
+
+        // Si le style détaillé n'a pas fini de charger après ce délai, on ne l'attend plus.
+        basemapTimeoutId = setTimeout(() => switchToFallbackBasemap("délai dépassé"), 9000);
+
+        map.on('load', () => {
+            mapLoadedOnce = true;
+            clearTimeout(basemapTimeoutId);
+            log("Carte chargée.", "info");
+            // Filet de sécurité : sur certains mobiles, le canevas WebGL se fige à une taille incorrecte
+            // (barre d'adresse qui se réduit après le premier rendu, clavier, changement d'orientation...).
+            // On force un nouveau calcul de la taille à quelques moments clés.
+            map.resize();
+            setTimeout(() => map.resize(), 300);
+            setTimeout(() => map.resize(), 1200);
+            // Décor (optionnel) : setFog n'existe pas dans MapLibre, on utilise setSky s'il est disponible
+            try {
+                if (typeof map.setSky === 'function') {
+                    map.setSky({
+                        'sky-color': '#0a0a0f',
+                        'horizon-color': '#28143a',
+                        'fog-color': '#0a0a0f',
+                        'sky-horizon-blend': 0.6,
+                        'horizon-fog-blend': 0.6,
+                        'fog-ground-blend': 0.6,
+                        'atmosphere-blend': 0.5
+                    });
+                }
+            } catch (e) {
+                console.warn('Décor du ciel ignoré :', e.message);
+            }
+        });
+
+        let mapErrorsLogged = 0;
+        map.on('error', e => {
+            const msg = (e && e.error && e.error.message) || 'erreur de chargement';
+            if (mapErrorsLogged++ < 3) log('Carte : ' + msg, 'warn');
+            // Toute erreur survenant avant le premier chargement réussi concerne quasi certainement
+            // le fond de carte lui-même (tuiles, sprite, police, clé requise, service en panne...),
+            // quel que soit le message exact : on ne cherche plus à reconnaître des mots-clés précis.
+            if (!usedFallbackBasemap && !mapLoadedOnce) {
+                switchToFallbackBasemap(msg);
+            }
+            // Filet de sécurité : si la vue globe 3D pose problème, on revient d'elle-même à la carte plate
+            try {
+                if (map.getProjection && map.getProjection().type === 'globe') {
+                    map.setProjection({ type: 'mercator' });
+                    const btn = document.querySelector('.maplibregl-ctrl-group button[title*="globe"]');
+                    if (btn) btn.textContent = '🌐';
+                    log("Bascule automatique en carte plate (compatibilité).", "warn");
+                }
+            } catch (e2) { /* rien à faire de plus */ }
+        });
+        } // fin du if (mapAvailable)
+
+        let currentMarkers = [];
+        let availableGenres = [];
+        let debounceTimer;
+        let isConnected = false;
+        let resultsShown = false; // true quand une recherche a fini de s'afficher
+        let searchMode = 'style'; // 'style' | 'name' | 'country'
+        let countriesList = [];
+        const NAME_LIMIT = 1000, COUNTRY_LIMIT = 2000;
+
+        // En mode normal, on trie par popularité (clickcount) : pratique pour retrouver une station connue,
+        // mais quand une recherche dépasse la limite de résultats, ce sont toujours les mêmes stations
+        // populaires qui remplissent la carte, au détriment des petites stations locales.
+        // Le mode découverte trie aléatoirement à la place, pour laisser une vraie chance aux moins connues.
+        function orderParam() {
+            return document.getElementById('discover-mode').checked ? 'order=random' : 'order=clickcount&reverse=true';
+        }
+
+        // radio-browser.info supporte CORS nativement : on l'appelle directement.
+        // Le proxy n'est gardé qu'en secours si l'appel direct échoue.
+        const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+        const API_BASE = "https://de1.api.radio-browser.info/json/";
+
+        // Centres approximatifs des pays (code ISO 3166-1 alpha-2 : lat lng), pour les stations sans GPS
+        const COUNTRY_CENTROIDS = Object.fromEntries(
+            "AD 42.55 1.60|AE 23.42 53.85|AF 33.94 67.71|AG 17.06 -61.80|AI 18.22 -63.07|AL 41.15 20.17|AM 40.07 45.04|AO -11.20 17.87|AQ -75.25 -0.07|AR -38.42 -63.62|AS -14.27 -170.13|AT 47.52 14.55|AU -25.27 133.78|AW 12.52 -69.97|AX 60.18 19.92|AZ 40.14 47.58|BA 43.92 17.68|BB 13.19 -59.54|BD 23.68 90.36|BE 50.50 4.47|BF 12.24 -1.56|BG 42.73 25.49|BH 26.07 50.56|BI -3.37 29.92|BJ 9.31 2.32|BL 17.90 -62.85|BM 32.31 -64.75|BN 4.54 114.73|BO -16.29 -63.59|BQ 12.18 -68.24|BR -14.24 -51.93|BS 25.03 -77.40|BT 27.51 90.43|BW -22.33 24.68|BY 53.71 27.95|BZ 17.19 -88.50|CA 56.13 -106.35|CC -12.16 96.87|CD -4.04 21.76|CF 6.61 20.94|CG -0.23 15.83|CH 46.82 8.23|CI 7.54 -5.55|CK -21.24 -159.78|CL -35.68 -71.54|CM 7.37 12.35|CN 35.86 104.20|CO 4.57 -74.30|CR 9.75 -83.75|CU 21.52 -77.78|CV 16.00 -24.01|CW 12.17 -68.99|CX -10.45 105.69|CY 35.13 33.43|CZ 49.82 15.47|DE 51.17 10.45|DJ 11.83 42.59|DK 56.26 9.50|DM 15.41 -61.37|DO 18.74 -70.16|DZ 28.03 1.66|EC -1.83 -78.18|EE 58.60 25.01|EG 26.82 30.80|EH 24.22 -12.89|ER 15.18 39.78|ES 40.46 -3.75|ET 9.15 40.49|FI 61.92 25.75|FJ -16.58 179.41|FK -51.80 -59.52|FM 7.43 150.55|FO 61.89 -6.91|FR 46.60 2.35|GA -0.80 11.61|GB 54.00 -2.50|GD 12.12 -61.68|GE 42.32 43.36|GF 3.93 -53.13|GG 49.46 -2.58|GH 7.95 -1.02|GI 36.14 -5.35|GL 71.71 -42.60|GM 13.44 -15.31|GN 9.95 -9.70|GP 16.27 -61.55|GQ 1.65 10.27|GR 39.07 21.82|GT 15.78 -90.23|GU 13.44 144.79|GW 11.80 -15.18|GY 4.86 -58.93|HK 22.32 114.17|HN 15.20 -86.24|HR 45.10 15.20|HT 18.97 -72.29|HU 47.16 19.50|ID -0.79 113.92|IE 53.41 -8.24|IL 31.05 34.85|IM 54.24 -4.55|IN 20.59 78.96|IQ 33.22 43.68|IR 32.43 53.69|IS 64.96 -19.02|IT 41.87 12.57|JE 49.21 -2.13|JM 18.11 -77.30|JO 30.59 36.24|JP 36.20 138.25|KE -0.02 37.91|KG 41.20 74.77|KH 12.57 104.99|KI 1.87 -157.36|KM -11.88 43.87|KN 17.36 -62.78|KP 40.34 127.51|KR 35.91 127.77|KW 29.31 47.48|KY 19.51 -80.57|KZ 48.02 66.92|LA 19.86 102.50|LB 33.85 35.86|LC 13.91 -60.98|LI 47.17 9.56|LK 7.87 80.77|LR 6.43 -9.43|LS -29.61 28.23|LT 55.17 23.88|LU 49.82 6.13|LV 56.88 24.60|LY 26.34 17.23|MA 31.79 -7.09|MC 43.74 7.41|MD 47.41 28.37|ME 42.71 19.37|MF 18.08 -63.05|MG -18.77 46.87|MH 7.13 171.18|MK 41.61 21.75|ML 17.57 -3.99|MM 21.91 95.96|MN 46.86 103.85|MO 22.20 113.54|MP 15.10 145.67|MQ 14.64 -61.02|MR 21.01 -10.94|MS 16.74 -62.19|MT 35.94 14.38|MU -20.35 57.55|MV 3.20 73.22|MW -13.25 34.30|MX 23.63 -102.55|MY 4.21 101.98|MZ -18.67 35.53|NA -22.96 18.49|NC -20.90 165.62|NE 17.61 8.08|NF -29.04 167.95|NG 9.08 8.68|NI 12.87 -85.21|NL 52.13 5.29|NO 60.47 8.47|NP 28.39 84.12|NR -0.52 166.93|NU -19.05 -169.87|NZ -40.90 174.89|OM 21.51 55.92|PA 8.54 -80.78|PE -9.19 -75.02|PF -17.68 -149.41|PG -6.31 143.96|PH 12.88 121.77|PK 30.38 69.35|PL 51.92 19.15|PM 46.94 -56.27|PN -24.70 -127.44|PR 18.22 -66.59|PS 31.95 35.23|PT 39.40 -8.22|PW 7.51 134.58|PY -23.44 -58.44|QA 25.35 51.18|RE -21.12 55.54|RO 45.94 24.97|RS 44.02 21.01|RU 61.52 105.32|RW -1.94 29.87|SA 23.89 45.08|SB -9.65 160.16|SC -4.68 55.49|SD 12.86 30.22|SE 60.13 18.64|SG 1.35 103.82|SH -24.14 -10.03|SI 46.15 14.99|SJ 77.55 23.67|SK 48.67 19.70|SL 8.46 -11.78|SM 43.94 12.46|SN 14.50 -14.45|SO 5.15 46.20|SR 3.92 -56.03|SS 6.88 31.31|ST 0.19 6.61|SV 13.79 -88.90|SX 18.04 -63.07|SY 34.80 39.00|SZ -26.52 31.47|TC 21.69 -71.80|TD 15.45 18.73|TG 8.62 0.82|TH 15.87 100.99|TJ 38.86 71.28|TK -8.97 -171.86|TL -8.87 125.73|TM 38.97 59.56|TN 33.89 9.54|TO -21.18 -175.20|TR 38.96 35.24|TT 10.69 -61.22|TV -7.11 177.65|TW 23.70 120.96|TZ -6.37 34.89|UA 48.38 31.17|UG 1.37 32.29|US 39.80 -98.60|UY -32.52 -55.77|UZ 41.38 64.59|VA 41.90 12.45|VC 12.98 -61.29|VE 6.42 -66.59|VG 18.42 -64.64|VI 18.34 -64.90|VN 14.06 108.28|VU -15.38 166.96|WF -13.77 -177.16|WS -13.76 -172.10|XK 42.60 20.90|YE 15.55 48.52|YT -12.83 45.17|ZA -30.56 22.94|ZM -13.13 27.85|ZW -19.02 29.15"
+            .split('|').map(e => { const [cc, la, ln] = e.split(' '); return [cc, [Number(la), Number(ln)]]; })
+        );
+
+        // Délai maximal jusqu'à la réponse (les en-têtes) ; la lecture du corps n'est pas interrompue
+        async function fetchWithTimeout(url, ms) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), ms);
+            try { return await fetch(url, { signal: ctrl.signal }); }
+            finally { clearTimeout(timer); }
+        }
+
+        async function smartFetch(url, ms = 15000) {
+            try {
+                const res = await fetchWithTimeout(url, ms);
+                if (res.ok) return res;
+                throw new Error("Status " + res.status);
+            } catch (e) {
+                log(`Appel direct échoué (${e.name === 'AbortError' ? 'délai dépassé' : e.message}), tentative via proxy...`, "warn");
+                return fetchWithTimeout(CORS_PROXY + encodeURIComponent(url), ms);
+            }
+        }
+
+        function log(msg, type = 'normal') {
+            const box = document.getElementById('log-box');
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            if (type === 'error') div.classList.add('log-error');
+            if (type === 'success') div.classList.add('log-success');
+            if (type === 'info') div.classList.add('log-info');
+            if (type === 'warn') div.classList.add('log-warn');
+            div.textContent = `> ${msg}`;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function clearMap() {
+            currentMarkers.forEach(m => m.remove());
+            currentMarkers = [];
+            document.getElementById('found-val').textContent = '0';
+            document.getElementById('scanned-val').textContent = '0';
+            document.getElementById('progress-fill').style.width = '0%';
+        }
+
+        // Test de connexion au démarrage
+        let testPromise = null;
+        function testConnection() {
+            if (testPromise) return testPromise;
+            const p = (async () => {
+                const badge = document.getElementById('connection-status');
+                badge.textContent = "TEST...";
+                badge.className = "status-badge status-ko";
+                try {
+                    const res = await smartFetch(API_BASE + "tags?limit=1", 8000);
+                    if (!res.ok) throw new Error("Status " + res.status);
+                    isConnected = true;
+                    badge.textContent = "EN LIGNE";
+                    badge.className = "status-badge status-ok";
+                    log("Connexion API établie avec succès.", "success");
+                    log("Prêt à charger les stations.", "info");
+                    fetchGenresList();
+                } catch (e) {
+                    isConnected = false;
+                    badge.textContent = "HORS LIGNE";
+                    badge.className = "status-badge status-ko";
+                    log("ÉCHEC de connexion à l'API radio.", "error");
+                    log("Détail : " + (e && e.name === 'AbortError' ? 'délai dépassé' : (e && e.message) || e), "error");
+                    log(`Page ouverte via « ${location.protocol} » ; navigateur ${navigator.onLine ? 'connecté' : 'hors ligne'}.`, "warn");
+                    log("Touchez le badge rouge pour réessayer.", "warn");
+                }
+                return isConnected;
+            })();
+            testPromise = p;
+            p.finally(() => { testPromise = null; });
+            return p;
+        }
+
+        async function fetchGenresList() {
+            try {
+                const url = API_BASE + "tags";
+                const res = await smartFetch(url);
+                if (res.ok) {
+                    availableGenres = await res.json();
+                    log(`${availableGenres.length} genres chargés pour l'auto-complétion.`, "info");
+                }
+            } catch (e) {
+                // Silencieux, ce n'est pas bloquant
+            }
+        }
+
+        const NON_MUSIC_TAGS = new Set(['news', 'talk', 'sports', 'sport', 'music', 'radio', 'fm', 'am', 'community', 'public radio', 'talk radio', 'news talk', 'information']);
+        const escHtml = t => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+        // Auto-complétion
+        const input = document.getElementById('genre-input');
+        const list = document.getElementById('autocomplete-list');
+        input.addEventListener('input', function() {
+            const val = this.value.toLowerCase();
+            // Le texte a changé : le bouton relance une recherche (au lieu d'ouvrir la liste des styles)
+            const loadBtn = document.getElementById('load-btn');
+            if (resultsShown && !loadBtn.disabled) { resultsShown = false; loadBtn.textContent = "Charger les stations"; }
+            list.innerHTML = ''; list.style.display = 'none';
+            if (searchMode === 'name') return;
+            if (searchMode === 'country') { showCountryMatches(val); return; }
+            if (!val || val.length < 2) return;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (availableGenres.length === 0) return;
+                const matches = availableGenres.filter(g => g.name.toLowerCase().includes(val) && g.stationcount > 10).sort((a, b) => b.stationcount - a.stationcount).slice(0, 8);
+                if (matches.length > 0) {
+                    list.style.display = 'block';
+                    matches.forEach(g => {
+                        const div = document.createElement('div');
+                        div.className = 'autocomplete-item';
+                        div.innerHTML = `<span>${escHtml(g.name)}</span> <span class="count">${g.stationcount}</span>`;
+                        div.onclick = () => { input.value = g.name; list.style.display = 'none'; launchSearch(); };
+                        list.appendChild(div);
+                    });
+                }
+            }, 300);
+        });
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#genre-input, #autocomplete-list, #load-btn, #explore-btn')) list.style.display = 'none';
+        });
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !document.getElementById('load-btn').disabled) { list.style.display = 'none'; launchSearch(); }
+        });
+
+        const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
+        function setPanelCollapsed(collapsed) {
+            document.querySelector('.ui-panel').classList.toggle('collapsed', collapsed);
+            document.getElementById('panel-toggle').textContent = collapsed ? '▾' : '▴';
+        }
+        function togglePanel() {
+            setPanelCollapsed(!document.querySelector('.ui-panel').classList.contains('collapsed'));
+        }
+
+        // ---------- Modes de recherche : style / station / pays ----------
+        const MODES = {
+            style:   { label: 'STYLE DE MUSIQUE',  placeholder: 'Ex: Jazz, Techno, Salsa...',            again: 'Changer de style',   explore: '💡 Voir les genres populaires' },
+            name:    { label: 'NOM DE LA STATION', placeholder: 'Ex: FIP, France Inter, Radio Nova...',  again: 'Nouvelle recherche', explore: '' },
+            country: { label: 'PAYS',              placeholder: 'Ex: France, Brésil, Japon...',          again: 'Changer de pays',    explore: '💡 Voir les pays populaires' }
+        };
+
+        function setSearchMode(mode) {
+            const btn = document.getElementById('load-btn');
+            if (btn.disabled) return; // pas de changement pendant une recherche
+            searchMode = mode;
+            const m = MODES[mode];
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+            document.getElementById('search-label').textContent = m.label;
+            input.placeholder = m.placeholder;
+            input.value = '';
+            list.innerHTML = ''; list.style.display = 'none';
+            resultsShown = false;
+            btn.textContent = "Charger les stations";
+            const ex = document.getElementById('explore-btn');
+            ex.textContent = m.explore;
+            ex.style.display = m.explore ? '' : 'none';
+            if (mode === 'country') fetchCountriesList(); // précharge la liste en arrière-plan
+            input.focus();
+        }
+
+        // Pays : liste officielle des codes ISO de l'API, noms affichés en français via le navigateur
+        const normTxt = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const makeRegionNames = lang => { try { return new Intl.DisplayNames([lang], { type: 'region' }); } catch (e) { return null; } };
+        const regionFr = makeRegionNames('fr'), regionEn = makeRegionNames('en');
+        const regionName = (dn, code) => { try { const n = dn && dn.of(code); return n && n !== code ? n : ''; } catch (e) { return ''; } };
+
+        async function fetchCountriesList() {
+            if (countriesList.length > 0) return;
+            try {
+                const res = await smartFetch(API_BASE + "countrycodes?hidebroken=true");
+                if (!res.ok) return;
+                const data = await res.json();
+                countriesList = data
+                    .filter(x => /^[A-Za-z]{2}$/.test(x.name || ''))
+                    .map(x => {
+                        const code = x.name.toUpperCase();
+                        const fr = regionName(regionFr, code), en = regionName(regionEn, code);
+                        return { code, label: fr || en || code, keys: [normTxt(fr), normTxt(en), code.toLowerCase()].filter(Boolean), stationcount: Number(x.stationcount) || 0 };
+                    });
+                log(`${countriesList.length} pays disponibles.`, "info");
+            } catch (e) { /* non bloquant */ }
+        }
+
+        function findCountries(q) {
+            const v = normTxt(q);
+            if (!v) return [];
+            return countriesList
+                .filter(x => x.keys.some(k => k.includes(v)))
+                .sort((a, b) => (b.keys.includes(v) - a.keys.includes(v)) || (b.stationcount - a.stationcount));
+        }
+
+        function fillCountryList(items) {
+            list.innerHTML = '';
+            if (items.length === 0) { list.style.display = 'none'; return; }
+            items.forEach(x => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.innerHTML = `<span>${escHtml(x.label)}</span> <span class="count">${x.stationcount}</span>`;
+                div.onclick = () => { input.value = x.label; list.style.display = 'none'; launchSearch(); };
+                list.appendChild(div);
+            });
+            list.style.display = 'block';
+            list.scrollTop = 0;
+        }
+
+        function showCountryMatches(val) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => fillCountryList(findCountries(val).slice(0, 8)), 200);
+        }
+
+        async function showCountryPicker() {
+            if (!isConnected && !(await testConnection())) { log("Pas de connexion à l'API.", "error"); return; }
+            await fetchCountriesList();
+            if (countriesList.length === 0) { log("Échec du chargement de la liste des pays.", "error"); return; }
+            fillCountryList([...countriesList].sort((a, b) => b.stationcount - a.stationcount).slice(0, 20));
+            input.focus();
+            input.select();
+        }
+
+        function openPicker() {
+            if (searchMode === 'style') showGenrePicker();
+            else if (searchMode === 'country') showCountryPicker();
+            else { input.focus(); input.select(); }
+        }
+
+        function onLoadClick() {
+            // Après une recherche affichée, le bouton ouvre la liste de choix (ou le champ pour une station)
+            if (resultsShown) openPicker(); else launchSearch();
+        }
+
+        // Cadre la carte sur les résultats (ignore les 5 % de points les plus éloignés : GPS erronés)
+        function fitToItems(pts) {
+            if (!pts.length) return;
+            const q = (arr, p) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(p * (arr.length - 1))))];
+            const lats = pts.map(i => i.lat).sort((a, b) => a - b);
+            const lngs = pts.map(i => i.lng).sort((a, b) => a - b);
+            const trim = pts.length >= 20 ? 0.05 : 0;
+            const narrow = window.innerWidth < 800;
+            try {
+                map.fitBounds(
+                    [[q(lngs, trim), q(lats, trim)], [q(lngs, 1 - trim), q(lats, 1 - trim)]],
+                    { padding: narrow ? { top: 80, bottom: 40, left: 30, right: 30 } : { top: 60, bottom: 60, left: 430, right: 60 }, maxZoom: 7, duration: 1500 }
+                );
+            } catch (e) { console.warn('Cadrage ignoré :', e.message); }
+        }
+
+        // ---------- Récupération des stations selon le mode ----------
+        async function fetchByName(q) {
+            const url = `${API_BASE}stations/search?name=${encodeURIComponent(q)}&hidebroken=true&${orderParam()}&limit=${NAME_LIMIT}`;
+            try {
+                const res = await smartFetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.length > 0) log(`${data.length} station(s) dont le nom contient « ${q} ».`, "success");
+                    if (data.length >= NAME_LIMIT) log(`Résultats limités aux ${NAME_LIMIT} plus écoutées : précisez le nom pour affiner.`, "warn");
+                    return data;
+                }
+            } catch (e) { log(`Erreur réseau : ${e.message}`, "error"); }
+            return [];
+        }
+
+        async function fetchByCountry(q) {
+            await fetchCountriesList();
+            if (countriesList.length === 0) { log("Liste des pays indisponible, réessayez dans un instant.", "error"); return []; }
+            const found = findCountries(q);
+            if (found.length === 0) { log(`Pays inconnu : « ${q} ». Choisissez-en un dans la liste.`, "error"); return []; }
+            const x = found[0];
+            log(`Pays : ${x.label} (${x.code})`, "info");
+            const url = `${API_BASE}stations/search?countrycode=${encodeURIComponent(x.code)}&hidebroken=true&${orderParam()}&limit=${COUNTRY_LIMIT}`;
+            try {
+                const res = await smartFetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.length > 0) log(`${data.length} station(s) pour ${x.label}.`, "success");
+                    if (data.length >= COUNTRY_LIMIT) log(`Résultats limités aux ${COUNTRY_LIMIT} plus écoutées.`, "warn");
+                    return data;
+                }
+            } catch (e) { log(`Erreur réseau : ${e.message}`, "error"); }
+            return [];
+        }
+
+        async function showGenrePicker() {
+            if (!isConnected && !(await testConnection())) { log("Pas de connexion à l'API.", "error"); return; }
+            if (availableGenres.length === 0) {
+                log("Chargement de la liste des styles...", "info");
+                await fetchGenresList();
+            }
+            if (availableGenres.length === 0) { log("Échec du chargement de la liste des styles.", "error"); return; }
+
+            const top = availableGenres
+                .filter(g => g.stationcount > 100 && !NON_MUSIC_TAGS.has(String(g.name).toLowerCase()))
+                .sort((a, b) => b.stationcount - a.stationcount)
+                .slice(0, 20);
+
+            list.innerHTML = '';
+            top.forEach(g => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.innerHTML = `<span>${escHtml(g.name)}</span> <span class="count">${g.stationcount}</span>`;
+                div.onclick = () => { input.value = g.name; list.style.display = 'none'; launchSearch(); };
+                list.appendChild(div);
+            });
+            list.style.display = 'block';
+            list.scrollTop = 0;
+            input.focus();
+            input.select();
+        }
+
+        async function fetchByStyle(originalQuery) {
+            const queriesToTest = new Set();
+            queriesToTest.add(originalQuery);
+            
+            const lower = originalQuery.toLowerCase();
+            if (lower.includes('progressif') || lower.includes('progressive')) {
+                queriesToTest.add('progressive rock');
+                queriesToTest.add('prog rock');
+                queriesToTest.add('progressive');
+                queriesToTest.add('art rock');
+                log("Mode Prog détecté : variantes ajoutées.", "warn");
+            }
+            if (lower.includes('metal')) queriesToTest.add('metal');
+            if (lower.includes('electro')) queriesToTest.add('electronic');
+
+            let finalData = [];
+            
+            for (const q of queriesToTest) {
+                if (finalData.length > 0) break;
+                log(`Tentative avec tag: "${q}"...`, "normal");
+                
+                const urlExact = `${API_BASE}stations/bytagexact/${encodeURIComponent(q.toLowerCase())}?${orderParam()}&limit=3000&hidebroken=true`;
+                
+                try {
+                    const res = await smartFetch(urlExact);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.length > 0) {
+                            finalData = data;
+                            log(`SUCCÈS avec "${q}" : ${data.length} stations !`, "success");
+                        } else {
+                            log(`Aucun résultat exact pour "${q}".`, "normal");
+                        }
+                    }
+                } catch (e) {
+                    log(`Erreur réseau pour "${q}": ${e.message}`, "error");
+                }
+
+                // Fallback recherche large : on garde tout résultat non vide.
+                // (Avant : les styles avec 20 stations ou moins, comme le zouk, étaient rejetés à tort.)
+                if (finalData.length === 0) {
+                    const urlPartial = `${API_BASE}stations/bytag/${encodeURIComponent(q.toLowerCase())}?${orderParam()}&limit=2000&hidebroken=true`;
+                    try {
+                        const res = await smartFetch(urlPartial);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.length > 0) {
+                                finalData = data;
+                                log(`SUCCÈS (large) avec "${q}" : ${data.length} station${data.length > 1 ? 's' : ''}.`, "success");
+                            }
+                        }
+                    } catch (e) { /* Ignore */ }
+                }
+            }
+            return finalData;
+        }
+
+        async function launchSearch() {
+            if (!mapAvailable) {
+                log("Impossible d'afficher les stations : la carte n'est pas disponible sur cet appareil.", "error");
+                return;
+            }
+            if (!isConnected) {
+                log("Connexion à l'API en cours...", "info");
+                if (!(await testConnection())) {
+                    log("ERREUR: Pas de connexion à l'API. Vérifiez internet.", "error");
+                    return;
+                }
+            }
+
+            const originalQuery = input.value.trim();
+            if (!originalQuery) { log({ style: 'Entrez un style !', name: 'Entrez un nom de station !', country: 'Entrez un pays !' }[searchMode], "error"); return; }
+
+            const btn = document.getElementById('load-btn');
+            btn.disabled = true; btn.textContent = "Recherche en cours...";
+            resultsShown = false;
+            clearMap();
+            log(`Démarrage recherche pour: "${originalQuery}"`, "info");
+
+            const themeColor = searchMode === 'style' ? getColorForGenre(originalQuery) : '#ff6b81';
+            updateTheme(themeColor);
+
+            let finalData = [];
+            if (searchMode === 'name') finalData = await fetchByName(originalQuery);
+            else if (searchMode === 'country') finalData = await fetchByCountry(originalQuery);
+            else finalData = await fetchByStyle(originalQuery);
+
+            if (finalData.length === 0) {
+                const hints = { style: 'Essayez "Rock", "Jazz" ou "Pop".', name: 'Essayez une partie du nom (ex : "fip").', country: 'Essayez un autre pays.' };
+                log(`ÉCHEC : Aucune station trouvée. ${hints[searchMode]}`, "error");
+                btn.disabled = false;
+                btn.textContent = "Réessayer";
+                return;
+            }
+
+            // L'API nomme les coordonnées geo_lat / geo_long ; beaucoup de stations n'en ont pas.
+            // Celles-ci sont placées au centre de leur pays (via le code pays), en spirale pour rester cliquables.
+            const items = [];
+            const noGeoByCountry = {};
+            let unplaceable = 0;
+            for (const s of finalData) {
+                const lat = Number(s.geo_lat), lng = Number(s.geo_long);
+                const hasGeo = s.geo_lat != null && s.geo_long != null &&
+                               Number.isFinite(lat) && Number.isFinite(lng) &&
+                               Math.abs(lat) <= 90 && Math.abs(lng) <= 180 &&
+                               !(lat === 0 && lng === 0);
+                if (hasGeo) { items.push({ s, lat, lng, approx: false }); continue; }
+                const cc = String(s.countrycode || '').toUpperCase();
+                if (COUNTRY_CENTROIDS[cc]) (noGeoByCountry[cc] = noGeoByCountry[cc] || []).push(s);
+                else unplaceable++;
+            }
+            const withGps = items.length;
+            let approxCount = 0;
+            for (const [cc, list] of Object.entries(noGeoByCountry)) {
+                const [clat, clng] = COUNTRY_CENTROIDS[cc];
+                const kx = 1 / Math.max(Math.cos(clat * Math.PI / 180), 0.2);
+                list.forEach((s, i) => {
+                    const r = 0.05 * Math.sqrt(i + 0.5);   // spirale de tournesol autour du centre
+                    const a = i * 2.399963;                // angle d'or
+                    items.push({
+                        s, approx: true,
+                        lat: Math.max(-85, Math.min(85, clat + r * Math.sin(a))),
+                        lng: clng + r * Math.cos(a) * kx
+                    });
+                    approxCount++;
+                });
+            }
+
+            document.getElementById('scanned-val').textContent = finalData.length;
+            document.getElementById('found-val').textContent = items.length;
+            log(`${withGps} stations avec GPS, ${approxCount} placées au centre de leur pays` +
+                (unplaceable ? `, ${unplaceable} sans pays identifiable (non affichées)` : '') + '.', "info");
+
+            if (items.length === 0) {
+                log("Aucune station ne peut être placée sur le globe. Essayez un autre style.", "warn");
+                btn.disabled = false;
+                btn.textContent = "Réessayer";
+                return;
+            }
+
+            if (searchMode !== 'style') fitToItems(items); // station / pays : la caméra se rapproche des résultats
+            const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const safeUrl = u => /^https?:\/\//i.test(u || '') ? esc(u) : '';
+
+            const batchSize = 100;
+            let idx = 0;
+
+            function addBatch() {
+                const end = Math.min(idx + batchSize, items.length);
+                for (let i = idx; i < end; i++) {
+                    const { s, lat, lng, approx } = items[i];
+                    const el = document.createElement('div');
+                    el.className = 'radio-marker' + (approx ? ' approx' : '');
+                    el.innerHTML = '<div class="radio-dot"></div>';
+                    // url_resolved n'est renseigné qu'après la première vérification du flux par radio-browser.info,
+                    // ce qui peut prendre quelques minutes pour une station tout juste ajoutée. En attendant,
+                    // on se rabat sur l'adresse brute soumise (url), qui suffit généralement à écouter.
+                    const link = safeUrl(s.url_resolved) || safeUrl(s.url);
+                    const popup = new maplibregl.Popup({ offset: 20 }).setHTML(`
+                        <span class="radio-name">${esc(s.name)}</span>
+                        <span class="radio-info">📍 ${esc(s.country) || 'Monde'}</span>
+                        ${approx ? '<span class="radio-info">⚠️ Position approximative (centre du pays)</span>' : ''}
+                        <span class="radio-tags">${esc(s.tags)}</span>
+                        ${link ? `<a href="${link}" target="_blank" rel="noopener" class="radio-btn">Écouter</a>` : ''}
+                    `);
+                    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+                        .setLngLat([lng, lat])
+                        .setPopup(popup)
+                        .addTo(map);
+                    currentMarkers.push(marker);
+                }
+                idx = end;
+                document.getElementById('progress-fill').style.width = `${(idx / items.length) * 100}%`;
+                if (idx < items.length) requestAnimationFrame(addBatch);
+                else {
+                    log("Affichage terminé.", "success");
+                    btn.disabled = false;
+                    btn.textContent = MODES[searchMode].again;
+                    resultsShown = true;
+                    if (isMobile()) setPanelCollapsed(true); // libère le globe sur petit écran
+                }
+            }
+            addBatch();
+        }
+
+        function getColorForGenre(g) {
+            g = g.toLowerCase();
+            if (g.includes('jazz')) return '#f1c40f';
+            if (g.includes('electro')) return '#00d2d3';
+            if (g.includes('classical')) return '#a29bfe';
+            if (g.includes('metal')) return '#ff4757';
+            if (g.includes('reggae')) return '#2ed573';
+            return '#ff6b81';
+        }
+
+        function updateTheme(color) {
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .radio-dot { background-color: ${color} !important; box-shadow: 0 0 10px ${color}80 !important; }
+                .radio-name { color: ${color} !important; }
+                .radio-btn { background: linear-gradient(45deg, ${color}, #ff4757) !important; }
+                .stat-val { color: ${color} !important; }
+                .progress-fill { background: linear-gradient(90deg, ${color}, #ff4757) !important; }
+                #load-btn { background: linear-gradient(45deg, ${color}, #ff4757) !important; }
+            `;
+            document.head.appendChild(style);
+        }
+        // Test de connexion dès l'ouverture, sans attendre le chargement de la carte
+        testConnection();
+    </script>
+</body>
+</html>
