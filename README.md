@@ -2,8 +2,8 @@
 
 Une mappemonde interactive pour découvrir des radios FM du monde entier, directement dans le navigateur.
 
-**👉 [Ouvrir le site](https://MchCvs.github.io/globe-musical/)**
-
+**👉 [Ouvrir le site](https://TON-PSEUDO.github.io/globe-musical/)**
+*(remplace ce lien par ta véritable adresse, visible dans Settings → Pages une fois le site en ligne)*
 
 ## Fonctionnalités
 
@@ -11,6 +11,7 @@ Une mappemonde interactive pour découvrir des radios FM du monde entier, direct
 - 🔀 Mode découverte : favorise les petites stations locales peu connues plutôt que les plus populaires
 - 📍 Les stations géolocalisées apparaissent à leur position exacte ; les autres sont placées au centre de leur pays
 - ▶️ Écoute directe des flux radio depuis la carte
+- 🌐 Interface en **français et en anglais** (bouton FR/EN, langue détectée automatiquement)
 - 📱 Compatible ordinateur et smartphone (Android et iPhone)
 
 ## Technologies utilisées
@@ -25,4 +26,4 @@ Les stations manquantes peuvent être ajoutées directement sur [radio-browser.i
 
 ## Auteur
 
-Créé par **Thierry** (La Réunion 🇷🇪).
+Créé par **Thierry** (La Réunion 🇷🇪), avec l'aide de [Claude](https://claude.ai) (Anthropic).

@@ -3,7 +3,7 @@
     Globe Musical — mappemonde interactive des radios FM du monde
     Créé par Thierry (La Réunion), avec l'aide de Claude (Anthropic) — septembre 2026
 -->
-<html lang="fr">
+<html lang="fr" id="html-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -117,9 +117,14 @@
 
         /* Bouton pour réduire/agrandir le panneau (visible uniquement sur petit écran) */
         #panel-toggle {
-            display: none; margin-left: auto; background: #2f3542; color: #fff; border: 1px solid #57606f;
+            margin-left: auto; background: #2f3542; color: #fff; border: 1px solid #57606f;
             border-radius: 6px; width: 36px; height: 36px; font-size: 16px; cursor: pointer; padding: 0;
         }
+        #lang-toggle {
+            background: #2f3542; color: #fff; border: 1px solid #57606f;
+            border-radius: 6px; height: 36px; padding: 0 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+        }
+        #lang-toggle:hover { border-color: #ff6b81; color: #ff6b81; }
         .ui-panel.collapsed > *:not(h2) { display: none; }
         .ui-panel.collapsed h2 { margin-bottom: 0; }
 
@@ -152,12 +157,13 @@
 </head>
 <body>
     <noscript><div style="color:#fff;background:#1e1e24;font-family:sans-serif;padding:30px;text-align:center">
-        Cette page a besoin de JavaScript pour fonctionner.<br>
-        Si vous l'avez ouverte depuis un aperçu de pièce jointe (Mail, Messages, Fichiers...), utilisez plutôt « Ouvrir dans Safari/Chrome ».
+        Cette page a besoin de JavaScript pour fonctionner. / This page needs JavaScript to work.<br>
+        Si vous l'avez ouverte depuis un aperçu de pièce jointe (Mail, Messages, Fichiers...), utilisez plutôt « Ouvrir dans Safari/Chrome ».<br>
+        If you opened it from an attachment preview (Mail, Messages, Files...), use "Open in Safari/Chrome" instead.
     </div></noscript>
     <div id="map"></div>
     <div class="ui-panel">
-        <h2>🌍 Globe Musical <span id="connection-status" class="status-badge status-ko" onclick="testConnection()" title="Toucher pour retester la connexion" style="cursor:pointer">TEST...</span><button id="panel-toggle" type="button" aria-label="Réduire ou agrandir le panneau" onclick="togglePanel()">▴</button></h2>
+        <h2>🌍 Globe Musical <span id="connection-status" class="status-badge status-ko" onclick="testConnection()" title="Toucher pour retester la connexion" style="cursor:pointer">TEST...</span><button id="lang-toggle" type="button" title="Switch to English" onclick="toggleLanguage()">EN</button><button id="panel-toggle" type="button" aria-label="Réduire ou agrandir le panneau" onclick="togglePanel()">▴</button></h2>
         <div class="search-container">
             <div class="mode-switch">
                 <button type="button" class="mode-btn active" data-mode="style" onclick="setSearchMode('style')">Style</button>
@@ -169,30 +175,238 @@
             <div id="autocomplete-list"></div>
             <label class="discover-toggle">
                 <input type="checkbox" id="discover-mode">
-                🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)
+                <span id="discover-label-text">🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)</span>
             </label>
         </div>
         <button id="load-btn" onclick="onLoadClick()">CHARGER LES STATIONS</button>
         <button id="explore-btn" onclick="openPicker()">💡 Voir les genres populaires</button>
         
         <div class="stats-grid">
-            <div class="stat-box"><span class="stat-val" id="scanned-val">0</span><span class="stat-label">Trouvées</span></div>
-            <div class="stat-box"><span class="stat-val" id="found-val">0</span><span class="stat-label">Affichées</span></div>
+            <div class="stat-box"><span class="stat-val" id="scanned-val">0</span><span class="stat-label" id="stat-found-label">Trouvées</span></div>
+            <div class="stat-box"><span class="stat-val" id="found-val">0</span><span class="stat-label" id="stat-shown-label">Affichées</span></div>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
         
         <div class="log-box" id="log-box">
-            <div class="log-entry">> Initialisation du système...</div>
+            <div class="log-entry" id="init-log-entry">> Initialisation du système...</div>
         </div>
-        <div class="credit-footer">Créé par Thierry · La Réunion 🇷🇪</div>
+        <div class="credit-footer"><span id="credit-prefix">Créé par</span> Thierry · La Réunion 🇷🇪</div>
     </div>
 
     <script>
+        // ---------- Internationalisation (FR / EN) ----------
+        const I18N = {
+            fr: {
+                langBtnLabel: 'EN', langBtnTitle: 'Switch to English',
+                retestTooltip: 'Toucher pour retester la connexion',
+                panelToggleLabel: 'Réduire ou agrandir le panneau',
+                globeToggleTitle: 'Basculer entre la carte plate et la vue globe 3D',
+                discoverLabel: '🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)',
+                statFound: 'Trouvées', statShown: 'Affichées',
+                initLog: 'Initialisation du système...',
+                creditPrefix: 'Créé par',
+                noscript1: 'Cette page a besoin de JavaScript pour fonctionner.',
+                noscript2: "Si vous l'avez ouverte depuis un aperçu de pièce jointe (Mail, Messages, Fichiers...), utilisez plutôt « Ouvrir dans Safari/Chrome ».",
+                webglUnavailable: 'Carte indisponible sur cet appareil (WebGL non supporté par ce navigateur).',
+                testing: 'TEST...', online: 'EN LIGNE', offline: 'HORS LIGNE',
+                modes: {
+                    style:   { tabLabel: 'Style',   label: 'STYLE DE MUSIQUE',  placeholder: 'Ex: Jazz, Techno, Salsa...',           again: 'Changer de style',   explore: '💡 Voir les genres populaires' },
+                    name:    { tabLabel: 'Station', label: 'NOM DE LA STATION', placeholder: 'Ex: FIP, France Inter, Radio Nova...', again: 'Nouvelle recherche', explore: '' },
+                    country: { tabLabel: 'Pays',    label: 'PAYS',              placeholder: 'Ex: France, Brésil, Japon...',         again: 'Changer de pays',    explore: '💡 Voir les pays populaires' }
+                },
+                loadBtn: 'CHARGER LES STATIONS',
+                searching: 'Recherche en cours...',
+                retry: 'Réessayer',
+                emptyQuery: { style: 'Entrez un style !', name: 'Entrez un nom de station !', country: 'Entrez un pays !' },
+                hints: { style: 'Essayez "Rock", "Jazz" ou "Pop".', name: 'Essayez une partie du nom (ex : "fip").', country: 'Essayez un autre pays.' },
+                world: 'Monde',
+                approxPopup: '⚠️ Position approximative (centre du pays)',
+                listen: 'Écouter',
+                msg: {
+                    globeOn: () => "Vue globe 3D activée.",
+                    globeOff: () => "Retour à la carte plate.",
+                    globeUnavailable: () => "Vue globe 3D indisponible sur cet appareil.",
+                    basemapFallback: r => `Fond de carte détaillé indisponible${r ? ` (${r})` : ""}, passage à un fond simplifié.`,
+                    basemapFallbackFailed: m => `Fond de secours aussi indisponible : ${m}`,
+                    mapLoaded: () => "Carte chargée.",
+                    mapError: m => `Carte : ${m}`,
+                    autoFlatSwitch: () => "Bascule automatique en carte plate (compatibilité).",
+                    directFetchFailed: r => `Appel direct échoué (${r}), tentative via proxy...`,
+                    timeoutExceeded: () => 'délai dépassé',
+                    apiConnected: () => "Connexion API établie avec succès.",
+                    readyToLoad: () => "Prêt à charger les stations.",
+                    apiConnectionFailed: () => "ÉCHEC de connexion à l'API radio.",
+                    detail: d => "Détail : " + d,
+                    pageOpenedVia: (p, o) => `Page ouverte via « ${p} » ; navigateur ${o ? 'connecté' : 'hors ligne'}.`,
+                    tapToRetry: () => "Touchez le badge rouge pour réessayer.",
+                    genresLoaded: n => `${n} genres chargés pour l'auto-complétion.`,
+                    noApiConnection: () => "Pas de connexion à l'API.",
+                    loadingStyles: () => "Chargement de la liste des styles...",
+                    styleListFailed: () => "Échec du chargement de la liste des styles.",
+                    countriesLoaded: n => `${n} pays disponibles.`,
+                    countriesListUnavailable: () => "Liste des pays indisponible, réessayez dans un instant.",
+                    unknownCountry: q => `Pays inconnu : « ${q} ». Choisissez-en un dans la liste.`,
+                    countryListFailed: () => "Échec du chargement de la liste des pays.",
+                    countryLabel: (l, c) => `Pays : ${l} (${c})`,
+                    stationsForCountry: (n, l) => `${n} station(s) pour ${l}.`,
+                    limitedResultsCountry: n => `Résultats limités aux ${n} plus écoutées.`,
+                    nameMatch: (n, q) => `${n} station(s) dont le nom contient « ${q} ».`,
+                    limitedResultsName: n => `Résultats limités aux ${n} plus écoutées : précisez le nom pour affiner.`,
+                    networkError: m => `Erreur réseau : ${m}`,
+                    networkErrorFor: (q, m) => `Erreur réseau pour "${q}": ${m}`,
+                    progModeDetected: () => "Mode Prog détecté : variantes ajoutées.",
+                    tryingTag: q => `Tentative avec tag: "${q}"...`,
+                    successTag: (q, n) => `SUCCÈS avec "${q}" : ${n} stations !`,
+                    noExactResult: q => `Aucun résultat exact pour "${q}".`,
+                    successBroad: (q, n) => `SUCCÈS (large) avec "${q}" : ${n} station${n > 1 ? 's' : ''}.`,
+                    mapUnavailable: () => "Impossible d'afficher les stations : la carte n'est pas disponible sur cet appareil.",
+                    connecting: () => "Connexion à l'API en cours...",
+                    connectionError: () => "ERREUR: Pas de connexion à l'API. Vérifiez internet.",
+                    startingSearch: q => `Démarrage recherche pour: "${q}"`,
+                    geoSummary: (g, a, u) => `${g} stations avec GPS, ${a} placées au centre de leur pays` + (u ? `, ${u} sans pays identifiable (non affichées)` : '') + '.',
+                    noPlaceable: () => "Aucune station ne peut être placée sur le globe. Essayez un autre style.",
+                    noStationsFound: hint => `ÉCHEC : Aucune station trouvée. ${hint}`,
+                    displayDone: () => "Affichage terminé."
+                }
+            },
+            en: {
+                langBtnLabel: 'FR', langBtnTitle: 'Passer en français',
+                retestTooltip: 'Tap to retest the connection',
+                panelToggleLabel: 'Collapse or expand the panel',
+                globeToggleTitle: 'Switch between flat map and 3D globe view',
+                discoverLabel: "🔀 Favor discovery (for well-stocked styles/countries: random mix instead of the most popular)",
+                statFound: 'Found', statShown: 'Shown',
+                initLog: 'Initializing system...',
+                creditPrefix: 'Created by',
+                noscript1: 'This page needs JavaScript to work.',
+                noscript2: 'If you opened it from an attachment preview (Mail, Messages, Files...), use "Open in Safari/Chrome" instead.',
+                webglUnavailable: 'Map unavailable on this device (WebGL not supported by this browser).',
+                testing: 'TESTING...', online: 'ONLINE', offline: 'OFFLINE',
+                modes: {
+                    style:   { tabLabel: 'Style',   label: 'MUSIC STYLE',   placeholder: 'E.g.: Jazz, Techno, Salsa...',       again: 'Change style',   explore: '💡 See popular genres' },
+                    name:    { tabLabel: 'Station', label: 'STATION NAME',  placeholder: 'E.g.: FIP, BBC, NPR...',             again: 'New search',     explore: '' },
+                    country: { tabLabel: 'Country', label: 'COUNTRY',       placeholder: 'E.g.: France, Brazil, Japan...',     again: 'Change country', explore: '💡 See popular countries' }
+                },
+                loadBtn: 'LOAD STATIONS',
+                searching: 'Searching...',
+                retry: 'Retry',
+                emptyQuery: { style: 'Enter a style!', name: 'Enter a station name!', country: 'Enter a country!' },
+                hints: { style: 'Try "Rock", "Jazz" or "Pop".', name: 'Try part of the name (e.g.: "fip").', country: 'Try another country.' },
+                world: 'World',
+                approxPopup: '⚠️ Approximate position (country center)',
+                listen: 'Listen',
+                msg: {
+                    globeOn: () => "3D globe view enabled.",
+                    globeOff: () => "Back to flat map.",
+                    globeUnavailable: () => "3D globe view unavailable on this device.",
+                    basemapFallback: r => `Detailed basemap unavailable${r ? ` (${r})` : ""}, switching to a simplified one.`,
+                    basemapFallbackFailed: m => `Fallback basemap also unavailable: ${m}`,
+                    mapLoaded: () => "Map loaded.",
+                    mapError: m => `Map: ${m}`,
+                    autoFlatSwitch: () => "Automatic switch to flat map (compatibility).",
+                    directFetchFailed: r => `Direct call failed (${r}), trying via proxy...`,
+                    timeoutExceeded: () => 'timed out',
+                    apiConnected: () => "API connection established successfully.",
+                    readyToLoad: () => "Ready to load stations.",
+                    apiConnectionFailed: () => "FAILED to connect to the radio API.",
+                    detail: d => "Detail: " + d,
+                    pageOpenedVia: (p, o) => `Page opened via "${p}"; browser ${o ? 'online' : 'offline'}.`,
+                    tapToRetry: () => "Tap the red badge to retry.",
+                    genresLoaded: n => `${n} genres loaded for autocomplete.`,
+                    noApiConnection: () => "No API connection.",
+                    loadingStyles: () => "Loading style list...",
+                    styleListFailed: () => "Failed to load the style list.",
+                    countriesLoaded: n => `${n} countries available.`,
+                    countriesListUnavailable: () => "Country list unavailable, try again in a moment.",
+                    unknownCountry: q => `Unknown country: "${q}". Pick one from the list.`,
+                    countryListFailed: () => "Failed to load the country list.",
+                    countryLabel: (l, c) => `Country: ${l} (${c})`,
+                    stationsForCountry: (n, l) => `${n} station(s) for ${l}.`,
+                    limitedResultsCountry: n => `Results limited to the ${n} most listened to.`,
+                    nameMatch: (n, q) => `${n} station(s) whose name contains "${q}".`,
+                    limitedResultsName: n => `Results limited to the ${n} most listened to: narrow the name to refine.`,
+                    networkError: m => `Network error: ${m}`,
+                    networkErrorFor: (q, m) => `Network error for "${q}": ${m}`,
+                    progModeDetected: () => "Prog mode detected: variants added.",
+                    tryingTag: q => `Trying tag: "${q}"...`,
+                    successTag: (q, n) => `SUCCESS with "${q}": ${n} stations!`,
+                    noExactResult: q => `No exact result for "${q}".`,
+                    successBroad: (q, n) => `SUCCESS (broad) with "${q}": ${n} station${n > 1 ? 's' : ''}.`,
+                    mapUnavailable: () => "Can't display stations: the map isn't available on this device.",
+                    connecting: () => "Connecting to the API...",
+                    connectionError: () => "ERROR: No API connection. Check your internet.",
+                    startingSearch: q => `Starting search for: "${q}"`,
+                    geoSummary: (g, a, u) => `${g} stations with GPS, ${a} placed at their country's center` + (u ? `, ${u} with no identifiable country (not shown)` : '') + '.',
+                    noPlaceable: () => "No station can be placed on the globe. Try another style.",
+                    noStationsFound: hint => `FAILED: No station found. ${hint}`,
+                    displayDone: () => "Display complete."
+                }
+            }
+        };
+        // localStorage peut lever une exception (navigation privée de certains navigateurs, cookies bloqués) :
+        // sans protection, ça bloquerait toute la page au démarrage.
+        let storedLang = null;
+        try { storedLang = localStorage.getItem('globeMusicalLang'); } catch (e) { /* ignoré */ }
+        let currentLang = (storedLang === 'fr' || storedLang === 'en') ? storedLang
+            : (navigator.language && navigator.language.toLowerCase().startsWith('fr') ? 'fr' : 'en');
+        const T = () => I18N[currentLang];
+
         // La vue « globe 3D » demande plus au GPU du téléphone que la carte plate classique ;
         // certains mobiles (Android comme iPhone) l'affichent mal, voire pas du tout.
         // On démarre donc toujours en carte plate, et le bouton 🌐 permet de passer en globe 3D à la demande.
         let map = null, mapAvailable = true;
         let basemapTimeoutId = null;
+        let globeToggleBtnEl = null; // référence au bouton 🌐, pour retraduire son titre
+
+        // ---------- Rendu dépendant de l'état (relancé à chaque changement de langue) ----------
+        function renderModeUI() {
+            const t = T(), m = t.modes[searchMode];
+            document.querySelectorAll('.mode-btn').forEach(b => { b.textContent = t.modes[b.dataset.mode].tabLabel; });
+            document.getElementById('search-label').textContent = m.label;
+            input.placeholder = m.placeholder;
+            const ex = document.getElementById('explore-btn');
+            ex.textContent = m.explore;
+            ex.style.display = m.explore ? '' : 'none';
+        }
+        let loadBtnMode = 'default'; // 'default' | 'searching' | 'retry' | 'again'
+        function renderLoadBtn() {
+            const btn = document.getElementById('load-btn'), t = T();
+            if (loadBtnMode === 'searching') btn.textContent = t.searching;
+            else if (loadBtnMode === 'retry') btn.textContent = t.retry;
+            else if (loadBtnMode === 'again') btn.textContent = t.modes[searchMode].again;
+            else btn.textContent = t.loadBtn;
+        }
+        let isTesting = false; // distinct de testPromise : vrai dès l'appel, sans attendre l'affectation de la promesse
+        function renderConnectionBadge() {
+            const badge = document.getElementById('connection-status'), t = T();
+            if (isTesting) { badge.textContent = t.testing; badge.className = 'status-badge status-ko'; }
+            else if (isConnected) { badge.textContent = t.online; badge.className = 'status-badge status-ok'; }
+            else { badge.textContent = t.offline; badge.className = 'status-badge status-ko'; }
+        }
+        function applyStaticI18n() {
+            const t = T();
+            document.getElementById('html-root').lang = currentLang;
+            document.getElementById('lang-toggle').textContent = t.langBtnLabel;
+            document.getElementById('lang-toggle').title = t.langBtnTitle;
+            document.getElementById('connection-status').title = t.retestTooltip;
+            document.getElementById('panel-toggle').setAttribute('aria-label', t.panelToggleLabel);
+            document.getElementById('discover-label-text').textContent = t.discoverLabel;
+            document.getElementById('stat-found-label').textContent = t.statFound;
+            document.getElementById('stat-shown-label').textContent = t.statShown;
+            document.getElementById('credit-prefix').textContent = t.creditPrefix;
+            const initEntry = document.getElementById('init-log-entry');
+            if (initEntry) initEntry.textContent = '> ' + t.initLog;
+            if (globeToggleBtnEl) globeToggleBtnEl.title = t.globeToggleTitle;
+            renderModeUI();
+            renderLoadBtn();
+            renderConnectionBadge();
+        }
+        function toggleLanguage() {
+            currentLang = currentLang === 'fr' ? 'en' : 'fr';
+            try { localStorage.setItem('globeMusicalLang', currentLang); } catch (e) { /* ignoré */ }
+            applyStaticI18n();
+        }
+
         class ProjectionToggleControl {
             onAdd(m) {
                 this._map = m;
@@ -200,7 +414,8 @@
                 this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
                 this._btn = document.createElement('button');
                 this._btn.type = 'button';
-                this._btn.title = 'Basculer entre la carte plate et la vue globe 3D';
+                this._btn.title = T().globeToggleTitle;
+                globeToggleBtnEl = this._btn;
                 this._btn.style.fontSize = '16px';
                 this._btn.textContent = '🌐';
                 this._btn.onclick = () => {
@@ -208,9 +423,9 @@
                     try {
                         m.setProjection({ type: goingGlobe ? 'globe' : 'mercator' });
                         this._btn.textContent = goingGlobe ? '🗺️' : '🌐';
-                        log(goingGlobe ? "Vue globe 3D activée." : "Retour à la carte plate.", "info");
+                        log(goingGlobe ? T().msg.globeOn() : T().msg.globeOff(), "info");
                     } catch (e) {
-                        log("Vue globe 3D indisponible sur cet appareil.", "warn");
+                        log(T().msg.globeUnavailable(), "warn");
                     }
                 };
                 this._container.appendChild(this._btn);
@@ -243,8 +458,8 @@
             if (usedFallbackBasemap || !mapAvailable) return;
             usedFallbackBasemap = true;
             clearTimeout(basemapTimeoutId);
-            log("Fond de carte détaillé indisponible" + (reason ? ` (${reason})` : "") + ", passage à un fond simplifié.", "warn");
-            try { map.setStyle(FALLBACK_STYLE); } catch (e) { log("Fond de secours aussi indisponible : " + e.message, "error"); }
+            log(T().msg.basemapFallback(reason), "warn");
+            try { map.setStyle(FALLBACK_STYLE); } catch (e) { log(T().msg.basemapFallbackFailed(e.message), "error"); }
         }
 
         try {
@@ -253,14 +468,14 @@
                 // OpenFreeMap : styles MapLibre gratuits et sans clé d'API (contrairement à CARTO, qui en exige
                 // désormais une, y compris sur ses anciennes tuiles gratuites — d'où l'ancien message d'erreur
                 // « API KEY REQUIRED » qui pouvait s'afficher ici).
-                style: 'https://tiles.openfreemap.org/styles/dark',
+                style: 'https://tiles.openfreemap.org/styles/liberty', // style clair, inversé en sombre par le filtre CSS (voir .maplibregl-canvas)
                 center: [0, 20], zoom: 1.5, antialias: true
             });
         } catch (e) {
             mapAvailable = false;
             document.getElementById('map').innerHTML =
                 '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;font-family:sans-serif">' +
-                'Carte indisponible sur cet appareil (WebGL non supporté par ce navigateur).</div>';
+                T().webglUnavailable + '</div>';
         }
 
         if (mapAvailable) {
@@ -282,7 +497,7 @@
         map.on('load', () => {
             mapLoadedOnce = true;
             clearTimeout(basemapTimeoutId);
-            log("Carte chargée.", "info");
+            log(T().msg.mapLoaded(), "info");
             // Filet de sécurité : sur certains mobiles, le canevas WebGL se fige à une taille incorrecte
             // (barre d'adresse qui se réduit après le premier rendu, clavier, changement d'orientation...).
             // On force un nouveau calcul de la taille à quelques moments clés.
@@ -310,7 +525,7 @@
         let mapErrorsLogged = 0;
         map.on('error', e => {
             const msg = (e && e.error && e.error.message) || 'erreur de chargement';
-            if (mapErrorsLogged++ < 3) log('Carte : ' + msg, 'warn');
+            if (mapErrorsLogged++ < 3) log(T().msg.mapError(msg), 'warn');
             // Toute erreur survenant avant le premier chargement réussi concerne quasi certainement
             // le fond de carte lui-même (tuiles, sprite, police, clé requise, service en panne...),
             // quel que soit le message exact : on ne cherche plus à reconnaître des mots-clés précis.
@@ -323,7 +538,7 @@
                     map.setProjection({ type: 'mercator' });
                     const btn = document.querySelector('.maplibregl-ctrl-group button[title*="globe"]');
                     if (btn) btn.textContent = '🌐';
-                    log("Bascule automatique en carte plate (compatibilité).", "warn");
+                    log(T().msg.autoFlatSwitch(), "warn");
                 }
             } catch (e2) { /* rien à faire de plus */ }
         });
@@ -371,7 +586,7 @@
                 if (res.ok) return res;
                 throw new Error("Status " + res.status);
             } catch (e) {
-                log(`Appel direct échoué (${e.name === 'AbortError' ? 'délai dépassé' : e.message}), tentative via proxy...`, "warn");
+                log(T().msg.directFetchFailed(e.name === 'AbortError' ? T().msg.timeoutExceeded() : e.message), "warn");
                 return fetchWithTimeout(CORS_PROXY + encodeURIComponent(url), ms);
             }
         }
@@ -401,27 +616,26 @@
         let testPromise = null;
         function testConnection() {
             if (testPromise) return testPromise;
+            isTesting = true;
+            renderConnectionBadge();
             const p = (async () => {
-                const badge = document.getElementById('connection-status');
-                badge.textContent = "TEST...";
-                badge.className = "status-badge status-ko";
                 try {
                     const res = await smartFetch(API_BASE + "tags?limit=1", 8000);
                     if (!res.ok) throw new Error("Status " + res.status);
                     isConnected = true;
-                    badge.textContent = "EN LIGNE";
-                    badge.className = "status-badge status-ok";
-                    log("Connexion API établie avec succès.", "success");
-                    log("Prêt à charger les stations.", "info");
+                    isTesting = false;
+                    renderConnectionBadge();
+                    log(T().msg.apiConnected(), "success");
+                    log(T().msg.readyToLoad(), "info");
                     fetchGenresList();
                 } catch (e) {
                     isConnected = false;
-                    badge.textContent = "HORS LIGNE";
-                    badge.className = "status-badge status-ko";
-                    log("ÉCHEC de connexion à l'API radio.", "error");
-                    log("Détail : " + (e && e.name === 'AbortError' ? 'délai dépassé' : (e && e.message) || e), "error");
-                    log(`Page ouverte via « ${location.protocol} » ; navigateur ${navigator.onLine ? 'connecté' : 'hors ligne'}.`, "warn");
-                    log("Touchez le badge rouge pour réessayer.", "warn");
+                    isTesting = false;
+                    renderConnectionBadge();
+                    log(T().msg.apiConnectionFailed(), "error");
+                    log(T().msg.detail(e && e.name === 'AbortError' ? T().msg.timeoutExceeded() : (e && e.message) || e), "error");
+                    log(T().msg.pageOpenedVia(location.protocol, navigator.onLine), "warn");
+                    log(T().msg.tapToRetry(), "warn");
                 }
                 return isConnected;
             })();
@@ -436,7 +650,7 @@
                 const res = await smartFetch(url);
                 if (res.ok) {
                     availableGenres = await res.json();
-                    log(`${availableGenres.length} genres chargés pour l'auto-complétion.`, "info");
+                    log(T().msg.genresLoaded(availableGenres.length), "info");
                 }
             } catch (e) {
                 // Silencieux, ce n'est pas bloquant
@@ -453,7 +667,7 @@
             const val = this.value.toLowerCase();
             // Le texte a changé : le bouton relance une recherche (au lieu d'ouvrir la liste des styles)
             const loadBtn = document.getElementById('load-btn');
-            if (resultsShown && !loadBtn.disabled) { resultsShown = false; loadBtn.textContent = "Charger les stations"; }
+            if (resultsShown && !loadBtn.disabled) { resultsShown = false; loadBtnMode = 'default'; renderLoadBtn(); }
             list.innerHTML = ''; list.style.display = 'none';
             if (searchMode === 'name') return;
             if (searchMode === 'country') { showCountryMatches(val); return; }
@@ -491,27 +705,17 @@
         }
 
         // ---------- Modes de recherche : style / station / pays ----------
-        const MODES = {
-            style:   { label: 'STYLE DE MUSIQUE',  placeholder: 'Ex: Jazz, Techno, Salsa...',            again: 'Changer de style',   explore: '💡 Voir les genres populaires' },
-            name:    { label: 'NOM DE LA STATION', placeholder: 'Ex: FIP, France Inter, Radio Nova...',  again: 'Nouvelle recherche', explore: '' },
-            country: { label: 'PAYS',              placeholder: 'Ex: France, Brésil, Japon...',          again: 'Changer de pays',    explore: '💡 Voir les pays populaires' }
-        };
-
         function setSearchMode(mode) {
             const btn = document.getElementById('load-btn');
             if (btn.disabled) return; // pas de changement pendant une recherche
             searchMode = mode;
-            const m = MODES[mode];
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-            document.getElementById('search-label').textContent = m.label;
-            input.placeholder = m.placeholder;
             input.value = '';
             list.innerHTML = ''; list.style.display = 'none';
             resultsShown = false;
-            btn.textContent = "Charger les stations";
-            const ex = document.getElementById('explore-btn');
-            ex.textContent = m.explore;
-            ex.style.display = m.explore ? '' : 'none';
+            loadBtnMode = 'default';
+            renderModeUI();
+            renderLoadBtn();
             if (mode === 'country') fetchCountriesList(); // précharge la liste en arrière-plan
             input.focus();
         }
@@ -533,12 +737,13 @@
                     .map(x => {
                         const code = x.name.toUpperCase();
                         const fr = regionName(regionFr, code), en = regionName(regionEn, code);
-                        return { code, label: fr || en || code, keys: [normTxt(fr), normTxt(en), code.toLowerCase()].filter(Boolean), stationcount: Number(x.stationcount) || 0 };
+                        return { code, labelFr: fr || en || code, labelEn: en || fr || code, keys: [normTxt(fr), normTxt(en), code.toLowerCase()].filter(Boolean), stationcount: Number(x.stationcount) || 0 };
                     });
-                log(`${countriesList.length} pays disponibles.`, "info");
+                log(T().msg.countriesLoaded(countriesList.length), "info");
             } catch (e) { /* non bloquant */ }
         }
 
+        const countryLabel = x => currentLang === 'en' ? x.labelEn : x.labelFr;
         function findCountries(q) {
             const v = normTxt(q);
             if (!v) return [];
@@ -553,8 +758,8 @@
             items.forEach(x => {
                 const div = document.createElement('div');
                 div.className = 'autocomplete-item';
-                div.innerHTML = `<span>${escHtml(x.label)}</span> <span class="count">${x.stationcount}</span>`;
-                div.onclick = () => { input.value = x.label; list.style.display = 'none'; launchSearch(); };
+                div.innerHTML = `<span>${escHtml(countryLabel(x))}</span> <span class="count">${x.stationcount}</span>`;
+                div.onclick = () => { input.value = countryLabel(x); list.style.display = 'none'; launchSearch(); };
                 list.appendChild(div);
             });
             list.style.display = 'block';
@@ -567,9 +772,9 @@
         }
 
         async function showCountryPicker() {
-            if (!isConnected && !(await testConnection())) { log("Pas de connexion à l'API.", "error"); return; }
+            if (!isConnected && !(await testConnection())) { log(T().msg.noApiConnection(), "error"); return; }
             await fetchCountriesList();
-            if (countriesList.length === 0) { log("Échec du chargement de la liste des pays.", "error"); return; }
+            if (countriesList.length === 0) { log(T().msg.countryListFailed(), "error"); return; }
             fillCountryList([...countriesList].sort((a, b) => b.stationcount - a.stationcount).slice(0, 20));
             input.focus();
             input.select();
@@ -609,41 +814,41 @@
                 const res = await smartFetch(url);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.length > 0) log(`${data.length} station(s) dont le nom contient « ${q} ».`, "success");
-                    if (data.length >= NAME_LIMIT) log(`Résultats limités aux ${NAME_LIMIT} plus écoutées : précisez le nom pour affiner.`, "warn");
+                    if (data.length > 0) log(T().msg.nameMatch(data.length, q), "success");
+                    if (data.length >= NAME_LIMIT) log(T().msg.limitedResultsName(NAME_LIMIT), "warn");
                     return data;
                 }
-            } catch (e) { log(`Erreur réseau : ${e.message}`, "error"); }
+            } catch (e) { log(T().msg.networkError(e.message), "error"); }
             return [];
         }
 
         async function fetchByCountry(q) {
             await fetchCountriesList();
-            if (countriesList.length === 0) { log("Liste des pays indisponible, réessayez dans un instant.", "error"); return []; }
+            if (countriesList.length === 0) { log(T().msg.countriesListUnavailable(), "error"); return []; }
             const found = findCountries(q);
-            if (found.length === 0) { log(`Pays inconnu : « ${q} ». Choisissez-en un dans la liste.`, "error"); return []; }
+            if (found.length === 0) { log(T().msg.unknownCountry(q), "error"); return []; }
             const x = found[0];
-            log(`Pays : ${x.label} (${x.code})`, "info");
+            log(T().msg.countryLabel(countryLabel(x), x.code), "info");
             const url = `${API_BASE}stations/search?countrycode=${encodeURIComponent(x.code)}&hidebroken=true&${orderParam()}&limit=${COUNTRY_LIMIT}`;
             try {
                 const res = await smartFetch(url);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.length > 0) log(`${data.length} station(s) pour ${x.label}.`, "success");
-                    if (data.length >= COUNTRY_LIMIT) log(`Résultats limités aux ${COUNTRY_LIMIT} plus écoutées.`, "warn");
+                    if (data.length > 0) log(T().msg.stationsForCountry(data.length, countryLabel(x)), "success");
+                    if (data.length >= COUNTRY_LIMIT) log(T().msg.limitedResultsCountry(COUNTRY_LIMIT), "warn");
                     return data;
                 }
-            } catch (e) { log(`Erreur réseau : ${e.message}`, "error"); }
+            } catch (e) { log(T().msg.networkError(e.message), "error"); }
             return [];
         }
 
         async function showGenrePicker() {
-            if (!isConnected && !(await testConnection())) { log("Pas de connexion à l'API.", "error"); return; }
+            if (!isConnected && !(await testConnection())) { log(T().msg.noApiConnection(), "error"); return; }
             if (availableGenres.length === 0) {
-                log("Chargement de la liste des styles...", "info");
+                log(T().msg.loadingStyles(), "info");
                 await fetchGenresList();
             }
-            if (availableGenres.length === 0) { log("Échec du chargement de la liste des styles.", "error"); return; }
+            if (availableGenres.length === 0) { log(T().msg.styleListFailed(), "error"); return; }
 
             const top = availableGenres
                 .filter(g => g.stationcount > 100 && !NON_MUSIC_TAGS.has(String(g.name).toLowerCase()))
@@ -674,7 +879,7 @@
                 queriesToTest.add('prog rock');
                 queriesToTest.add('progressive');
                 queriesToTest.add('art rock');
-                log("Mode Prog détecté : variantes ajoutées.", "warn");
+                log(T().msg.progModeDetected(), "warn");
             }
             if (lower.includes('metal')) queriesToTest.add('metal');
             if (lower.includes('electro')) queriesToTest.add('electronic');
@@ -683,7 +888,7 @@
             
             for (const q of queriesToTest) {
                 if (finalData.length > 0) break;
-                log(`Tentative avec tag: "${q}"...`, "normal");
+                log(T().msg.tryingTag(q), "normal");
                 
                 const urlExact = `${API_BASE}stations/bytagexact/${encodeURIComponent(q.toLowerCase())}?${orderParam()}&limit=3000&hidebroken=true`;
                 
@@ -693,13 +898,13 @@
                         const data = await res.json();
                         if (data.length > 0) {
                             finalData = data;
-                            log(`SUCCÈS avec "${q}" : ${data.length} stations !`, "success");
+                            log(T().msg.successTag(q, data.length), "success");
                         } else {
-                            log(`Aucun résultat exact pour "${q}".`, "normal");
+                            log(T().msg.noExactResult(q), "normal");
                         }
                     }
                 } catch (e) {
-                    log(`Erreur réseau pour "${q}": ${e.message}`, "error");
+                    log(T().msg.networkErrorFor(q, e.message), "error");
                 }
 
                 // Fallback recherche large : on garde tout résultat non vide.
@@ -712,7 +917,7 @@
                             const data = await res.json();
                             if (data.length > 0) {
                                 finalData = data;
-                                log(`SUCCÈS (large) avec "${q}" : ${data.length} station${data.length > 1 ? 's' : ''}.`, "success");
+                                log(T().msg.successBroad(q, data.length), "success");
                             }
                         }
                     } catch (e) { /* Ignore */ }
@@ -723,25 +928,25 @@
 
         async function launchSearch() {
             if (!mapAvailable) {
-                log("Impossible d'afficher les stations : la carte n'est pas disponible sur cet appareil.", "error");
+                log(T().msg.mapUnavailable(), "error");
                 return;
             }
             if (!isConnected) {
-                log("Connexion à l'API en cours...", "info");
+                log(T().msg.connecting(), "info");
                 if (!(await testConnection())) {
-                    log("ERREUR: Pas de connexion à l'API. Vérifiez internet.", "error");
+                    log(T().msg.connectionError(), "error");
                     return;
                 }
             }
 
             const originalQuery = input.value.trim();
-            if (!originalQuery) { log({ style: 'Entrez un style !', name: 'Entrez un nom de station !', country: 'Entrez un pays !' }[searchMode], "error"); return; }
+            if (!originalQuery) { log(T().emptyQuery[searchMode], "error"); return; }
 
             const btn = document.getElementById('load-btn');
-            btn.disabled = true; btn.textContent = "Recherche en cours...";
+            btn.disabled = true; loadBtnMode = 'searching'; renderLoadBtn();
             resultsShown = false;
             clearMap();
-            log(`Démarrage recherche pour: "${originalQuery}"`, "info");
+            log(T().msg.startingSearch(originalQuery), "info");
 
             const themeColor = searchMode === 'style' ? getColorForGenre(originalQuery) : '#ff6b81';
             updateTheme(themeColor);
@@ -752,10 +957,9 @@
             else finalData = await fetchByStyle(originalQuery);
 
             if (finalData.length === 0) {
-                const hints = { style: 'Essayez "Rock", "Jazz" ou "Pop".', name: 'Essayez une partie du nom (ex : "fip").', country: 'Essayez un autre pays.' };
-                log(`ÉCHEC : Aucune station trouvée. ${hints[searchMode]}`, "error");
+                log(T().msg.noStationsFound(T().hints[searchMode]), "error");
                 btn.disabled = false;
-                btn.textContent = "Réessayer";
+                loadBtnMode = 'retry'; renderLoadBtn();
                 return;
             }
 
@@ -794,13 +998,12 @@
 
             document.getElementById('scanned-val').textContent = finalData.length;
             document.getElementById('found-val').textContent = items.length;
-            log(`${withGps} stations avec GPS, ${approxCount} placées au centre de leur pays` +
-                (unplaceable ? `, ${unplaceable} sans pays identifiable (non affichées)` : '') + '.', "info");
+            log(T().msg.geoSummary(withGps, approxCount, unplaceable), "info");
 
             if (items.length === 0) {
-                log("Aucune station ne peut être placée sur le globe. Essayez un autre style.", "warn");
+                log(T().msg.noPlaceable(), "warn");
                 btn.disabled = false;
-                btn.textContent = "Réessayer";
+                loadBtnMode = 'retry'; renderLoadBtn();
                 return;
             }
 
@@ -824,10 +1027,10 @@
                     const link = safeUrl(s.url_resolved) || safeUrl(s.url);
                     const popup = new maplibregl.Popup({ offset: 20 }).setHTML(`
                         <span class="radio-name">${esc(s.name)}</span>
-                        <span class="radio-info">📍 ${esc(s.country) || 'Monde'}</span>
-                        ${approx ? '<span class="radio-info">⚠️ Position approximative (centre du pays)</span>' : ''}
+                        <span class="radio-info">📍 ${esc(s.country) || esc(T().world)}</span>
+                        ${approx ? `<span class="radio-info">${esc(T().approxPopup)}</span>` : ''}
                         <span class="radio-tags">${esc(s.tags)}</span>
-                        ${link ? `<a href="${link}" target="_blank" rel="noopener" class="radio-btn">Écouter</a>` : ''}
+                        ${link ? `<a href="${link}" target="_blank" rel="noopener" class="radio-btn">${esc(T().listen)}</a>` : ''}
                     `);
                     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
                         .setLngLat([lng, lat])
@@ -839,9 +1042,9 @@
                 document.getElementById('progress-fill').style.width = `${(idx / items.length) * 100}%`;
                 if (idx < items.length) requestAnimationFrame(addBatch);
                 else {
-                    log("Affichage terminé.", "success");
+                    log(T().msg.displayDone(), "success");
                     btn.disabled = false;
-                    btn.textContent = MODES[searchMode].again;
+                    loadBtnMode = 'again'; renderLoadBtn();
                     resultsShown = true;
                     if (isMobile()) setPanelCollapsed(true); // libère le globe sur petit écran
                 }
@@ -871,7 +1074,9 @@
             `;
             document.head.appendChild(style);
         }
-        // Test de connexion dès l'ouverture, sans attendre le chargement de la carte
+        // Langue initiale (mémorisée, sinon déduite de la langue du navigateur), puis connexion à l'API
+        // dès l'ouverture, sans attendre le chargement de la carte.
+        applyStaticI18n();
         testConnection();
     </script>
 </body>
