@@ -1025,10 +1025,18 @@
                     // ce qui peut prendre quelques minutes pour une station tout juste ajoutée. En attendant,
                     // on se rabat sur l'adresse brute soumise (url), qui suffit généralement à écouter.
                     const link = safeUrl(s.url_resolved) || safeUrl(s.url);
+                    // Format du flux (codec, débit, HLS) : utile pour comprendre pourquoi certains flux
+                    // ne se lisent pas dans le navigateur d'un téléphone.
+                    const streamInfo = [
+                        s.codec && String(s.codec).toUpperCase() !== 'UNKNOWN' ? String(s.codec) : '',
+                        Number(s.bitrate) > 0 ? Number(s.bitrate) + ' kbps' : '',
+                        Number(s.hls) === 1 ? 'HLS' : ''
+                    ].filter(Boolean).join(' · ');
                     const popup = new maplibregl.Popup({ offset: 20 }).setHTML(`
                         <span class="radio-name">${esc(s.name)}</span>
                         <span class="radio-info">📍 ${esc(s.country) || esc(T().world)}</span>
                         ${approx ? `<span class="radio-info">${esc(T().approxPopup)}</span>` : ''}
+                        ${streamInfo ? `<span class="radio-info">🎧 ${esc(streamInfo)}</span>` : ''}
                         <span class="radio-tags">${esc(s.tags)}</span>
                         ${link ? `<a href="${link}" target="_blank" rel="noopener" class="radio-btn">${esc(T().listen)}</a>` : ''}
                     `);
