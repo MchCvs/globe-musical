@@ -10,7 +10,7 @@ Une mappemonde interactive pour découvrir et écouter les radios FM du monde en
 -    Un mode découverte : favorise les petites stations locales peu connues plutôt que les plus populaires
 - 📍 Les stations géolocalisées apparaissent à leur position exacte ; les autres sont placées au centre de leur pays
 - ▶️ Écoute directe des flux radio depuis la carte
-- 🌐 Interface en **Français,en Anglais et en Allemand** (drapeaux FR/EN/DE, langue détectée automatiquement)
+- 🌐 Interface en **Français,Anglais et Allemand** (drapeaux FR/EN/DE, langue détectée automatiquement)
 - 📱 Compatible ordinateur et smartphone (Android et iPhone)
 
 ## Technologies utilisées
