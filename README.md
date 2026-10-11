@@ -1,16 +1,16 @@
 # 🌍 Globe Musical
 
-Une mappemonde interactive pour découvrir des radios FM du monde entier, directement dans le navigateur.
+Une mappemonde interactive pour découvrir et écouter les radios FM du monde entier, directement dans le navigateur.
 
 **👉 [Ouvrir le site](https://mchcvs.github.io/globe-musical/)**
 
 ## Fonctionnalités
 
 - 🔍 Recherche par **style de musique**, par **nom de station**, ou par **pays**
-- 🔀 Mode découverte : favorise les petites stations locales peu connues plutôt que les plus populaires
+-    Mode découverte : favorise les petites stations locales peu connues plutôt que les plus populaires
 - 📍 Les stations géolocalisées apparaissent à leur position exacte ; les autres sont placées au centre de leur pays
 - ▶️ Écoute directe des flux radio depuis la carte
-- 🌐 Interface en **français et en anglais** (bouton FR/EN, langue détectée automatiquement)
+- 🌐 Interface en **français,en anglais et en allemand** (drapeaux FR/EN/DE, langue détectée automatiquement)
 - 📱 Compatible ordinateur et smartphone (Android et iPhone)
 
 ## Technologies utilisées
@@ -25,4 +25,4 @@ Les stations manquantes peuvent être ajoutées directement sur [radio-browser.i
 
 ## Auteur
 
-Créé par **Thierry** (La Réunion 🇷🇪)
+Créé par **Thierry CVS** (La Réunion 🇷🇪)
