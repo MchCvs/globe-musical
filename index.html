@@ -53,14 +53,24 @@
             padding: 20px; border-radius: 12px; border: 1px solid #444; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
             z-index: 100; width: 380px; max-height: 85vh; display: flex; flex-direction: column;
         }
-        .ui-panel h2 { margin: 0 0 15px 0; font-size: 18px; color: #ff6b81; text-transform: uppercase; }
+        .ui-panel h2 {
+            margin: 0 0 15px 0; font-size: 18px; color: #ff6b81; text-transform: uppercase;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .ui-panel h2 .status-badge { margin-left: 0; flex: none; white-space: nowrap; }
         .search-container { position: relative; margin-bottom: 15px; }
         .control-label { display: block; font-size: 12px; color: #a4b0be; margin-bottom: 5px; font-weight: 600; }
+        /* Interrupteur sans case à cocher : le bloc entier est cliquable et s'allume quand l'option est active.
+           La case reste dans le DOM (masquée visuellement) pour garder le clavier et la lecture d'écran. */
         .discover-toggle {
-            display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: 12px;
-            color: #a4b0be; cursor: pointer; line-height: 1.4;
+            display: block; position: relative; margin-top: 10px; padding: 8px 10px; font-size: 12px;
+            color: #a4b0be; cursor: pointer; line-height: 1.4; border: 1px dashed #57606f; border-radius: 6px;
+            transition: border-color 0.2s, background 0.2s, color 0.2s;
         }
-        .discover-toggle input { margin-top: 2px; accent-color: #ff6b81; cursor: pointer; }
+        .discover-toggle:hover { border-color: #ff6b81; }
+        .discover-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+        .discover-toggle.active { border: 1px solid #ff6b81; background: rgba(255, 107, 129, 0.15); color: #fff; }
+        .discover-toggle:focus-within { outline: 2px solid #ff6b81; outline-offset: 2px; }
         .credit-footer { text-align: center; font-size: 10px; color: #57606f; margin-top: 10px; letter-spacing: 0.3px; }
         input#genre-input {
             width: 100%; padding: 12px; background: #2f3542; color: #fff; border: 1px solid #57606f;
@@ -116,14 +126,16 @@
         .status-ko { background: #ff4757; color: #fff; }
 
         /* Bouton pour réduire/agrandir le panneau (visible uniquement sur petit écran) */
-        #panel-toggle {
-            margin-left: auto; background: #2f3542; color: #fff; border: 1px solid #57606f;
-            border-radius: 6px; width: 36px; height: 36px; font-size: 16px; cursor: pointer; padding: 0;
+        /* Les deux boutons de l'en-tête partagent exactement la même boîte (36 × 36) et sont centrés
+           sur la même ligne ; le sélecteur de langue vient juste à gauche du bouton réduire/agrandir. */
+        #panel-toggle, #lang-toggle {
+            flex: none; box-sizing: border-box; width: 36px; height: 36px; padding: 0; margin: 0;
+            display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+            background: #2f3542; color: #fff; border: 1px solid #57606f; border-radius: 6px; cursor: pointer;
+            font-family: inherit; text-transform: none;
         }
-        #lang-toggle {
-            background: #2f3542; color: #fff; border: 1px solid #57606f;
-            border-radius: 6px; height: 36px; padding: 0 10px; font-size: 12px; font-weight: 700; cursor: pointer;
-        }
+        #panel-toggle { font-size: 16px; }
+        #lang-toggle { margin-left: auto; font-size: 12px; font-weight: 700; }
         #lang-toggle:hover { border-color: #ff6b81; color: #ff6b81; }
         .ui-panel.collapsed > *:not(h2) { display: none; }
         .ui-panel.collapsed h2 { margin-bottom: 0; }
@@ -131,8 +143,7 @@
         /* Smartphone : le panneau prend la largeur de l'écran au lieu de 380 px fixes */
         @media (max-width: 600px) {
             .ui-panel { top: 10px; left: 10px; right: 10px; width: auto; padding: 12px; max-height: 80vh; max-height: 80dvh; }
-            .ui-panel h2 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; }
-            #panel-toggle { display: inline-block; }
+            .ui-panel h2 { font-size: 16px; margin-bottom: 10px; }
             input#genre-input { font-size: 16px; } /* évite le zoom automatique à la saisie */
             .log-box { height: 70px; }
             .stats-grid { margin-top: 10px; }
@@ -171,11 +182,11 @@
                 <button type="button" class="mode-btn" data-mode="country" onclick="setSearchMode('country')">Pays</button>
             </div>
             <label class="control-label" id="search-label">STYLE DE MUSIQUE</label>
-            <input type="text" id="genre-input" value="progressive rock" placeholder="Ex: Jazz, Techno, Salsa...">
+            <input type="text" id="genre-input" placeholder="Ex: Jazz, Techno, Salsa...">
             <div id="autocomplete-list"></div>
-            <label class="discover-toggle">
+            <label class="discover-toggle" id="discover-toggle">
                 <input type="checkbox" id="discover-mode">
-                <span id="discover-label-text">🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)</span>
+                <span id="discover-label-text">Cliquez ici : Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)</span>
             </label>
         </div>
         <button id="load-btn" onclick="onLoadClick()">CHARGER LES STATIONS</button>
@@ -201,7 +212,7 @@
                 retestTooltip: 'Toucher pour retester la connexion',
                 panelToggleLabel: 'Réduire ou agrandir le panneau',
                 globeToggleTitle: 'Basculer entre la carte plate et la vue globe 3D',
-                discoverLabel: '🔀 Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)',
+                discoverLabel: 'Cliquez ici : Favoriser la découverte (styles/pays très fournis : mélange aléatoire au lieu des plus populaires)',
                 statFound: 'Trouvées', statShown: 'Affichées',
                 initLog: 'Initialisation du système...',
                 creditPrefix: 'Créé par',
@@ -274,7 +285,7 @@
                 retestTooltip: 'Tap to retest the connection',
                 panelToggleLabel: 'Collapse or expand the panel',
                 globeToggleTitle: 'Switch between flat map and 3D globe view',
-                discoverLabel: "🔀 Favor discovery (for well-stocked styles/countries: random mix instead of the most popular)",
+                discoverLabel: "Click here: Favor discovery (for well-stocked styles/countries: random mix instead of the most popular)",
                 statFound: 'Found', statShown: 'Shown',
                 initLog: 'Initializing system...',
                 creditPrefix: 'Created by',
@@ -657,6 +668,7 @@
             }
         }
 
+        const PINNED_GENRES = ['progressive rock'];
         const NON_MUSIC_TAGS = new Set(['news', 'talk', 'sports', 'sport', 'music', 'radio', 'fm', 'am', 'community', 'public radio', 'talk radio', 'news talk', 'information']);
         const escHtml = t => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
@@ -691,6 +703,10 @@
         document.addEventListener('click', e => {
             if (!e.target.closest('#genre-input, #autocomplete-list, #load-btn, #explore-btn')) list.style.display = 'none';
         });
+        // « Favoriser la découverte » : le bloc s'allume quand l'option est active
+        const discoverInput = document.getElementById('discover-mode');
+        const discoverBox = document.getElementById('discover-toggle');
+        discoverInput.addEventListener('change', () => discoverBox.classList.toggle('active', discoverInput.checked));
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !document.getElementById('load-btn').disabled) { list.style.display = 'none'; launchSearch(); }
         });
@@ -854,12 +870,17 @@
                 .filter(g => g.stationcount > 100 && !NON_MUSIC_TAGS.has(String(g.name).toLowerCase()))
                 .sort((a, b) => b.stationcount - a.stationcount)
                 .slice(0, 20);
+            // Genres épinglés : toujours proposés EN TÊTE de la liste (visibles sans faire défiler),
+            // même s'ils ne sont pas dans le top 20 ou absents de la liste renvoyée par l'API.
+            const pinned = PINNED_GENRES.map(name =>
+                availableGenres.find(g => String(g.name).toLowerCase() === name) || { name, stationcount: null });
+            const shown = [...pinned, ...top.filter(g => !PINNED_GENRES.includes(String(g.name).toLowerCase()))];
 
             list.innerHTML = '';
-            top.forEach(g => {
+            shown.forEach(g => {
                 const div = document.createElement('div');
                 div.className = 'autocomplete-item';
-                div.innerHTML = `<span>${escHtml(g.name)}</span> <span class="count">${g.stationcount}</span>`;
+                div.innerHTML = `<span>${escHtml(g.name)}</span>` + (g.stationcount != null ? ` <span class="count">${g.stationcount}</span>` : '');
                 div.onclick = () => { input.value = g.name; list.style.display = 'none'; launchSearch(); };
                 list.appendChild(div);
             });
