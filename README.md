@@ -25,4 +25,4 @@ Les stations manquantes peuvent être ajoutées directement sur [radio-browser.i
 
 ## Auteur
 
-Créé par **Thierry CVS** (La Réunion 🇷🇪)
+Créé par **Thierry CVS** Piton Sainte Rose (La Réunion 🇷🇪)
